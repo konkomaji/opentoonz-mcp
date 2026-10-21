@@ -36,6 +36,7 @@ class Element:
     fill: tuple | None
     stroke: tuple | None
     width: float = 0.0  # px
+    pressure: list | None = None  # brush: [(u, p)] per contour (same profile for each)
 
 
 # ------------------------------------------------------------------ geometry
@@ -192,6 +193,13 @@ def shape_contours(sh: dict) -> list[Contour]:
         return [Contour(pts, closed, bool(sh.get("smooth", t == "path")))]
     if t == "text":
         return _text_contours(sh)
+    if t == "svgpath":
+        from .art import svgpath_contours
+        return [Contour(pts, closed, False) for pts, closed in
+                svgpath_contours(str(sh.get("d", "")), sh.get("transform"))]
+    if t == "brush":
+        pts = [(float(p[0]), float(p[1])) for p in sh.get("points", [])]
+        return [Contour(pts, False, True)] if len(pts) >= 2 else []
     raise ValueError(f"unknown shape type {t}")
 
 
@@ -207,7 +215,7 @@ def humanize(c: Contour, rng: random.Random, amp: float, wavelength: float, over
     if amp <= 0 and jitter <= 0:
         return c
     pts = list(c.pts)
-    if len(pts) >= 2:
+    if 2 <= len(pts) <= 16:  # jitter sparse control points only; dense samples (svgpath/text) would turn jagged
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         size = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
         j = jitter * size * (amp > 0)
@@ -307,17 +315,21 @@ def build_elements(shapes: list[dict], canvas_h: int, style_name: str | None, se
         human = sh.get("human", True)
         amp = float(sh.get("wobble", st["wobble"])) * px if human else 0.0
         cs = shape_contours(sh)
+        if not cs:
+            continue
         if sh.get("type") != "text":
             cs = [humanize(c, rng, amp, st["wavelength"] * px, st["overshoot_ends"], 0.015 if human else 0)
                   for c in cs]
         op = sh.get("opacity")
         fill = parse_color(sh["fill"], op) if sh.get("fill") is not None else None
         default_stroke = "#1a1a1a" if fill is None or sh.get("type") not in ("text",) else None
-        stroke_c = sh.get("stroke", default_stroke)
+        stroke_c = sh.get("stroke", sh.get("color", default_stroke))
         if stroke_c is not None and sh.get("trace_line"):
             stroke_c = styles.trace_line_color(parse_color(fill or stroke_c))
         stroke = parse_color(stroke_c, op) if stroke_c is not None else None
         weight = st["line"] * (st["interior"] if sh.get("interior") else 1.0)
+        if sh.get("type") == "brush":
+            weight = float(sh.get("width", weight * 2.5))
         width = float(sh.get("stroke_width", weight)) * px if stroke else 0.0
         if width <= 0:
             stroke = None
@@ -342,8 +354,23 @@ def build_elements(shapes: list[dict], canvas_h: int, style_name: str | None, se
             if stroke and open_:
                 els.append(Element(open_, None, stroke, width))
         elif stroke:
-            els.append(Element(cs, None, stroke, width))
+            prof = None
+            if sh.get("type") == "brush":
+                from .art import brush_profile
+                prof = brush_profile(sh.get("points", []))
+            els.append(Element(cs, None, stroke, width, prof))
     return els
+
+
+def ink_profiles(els: list[Element]) -> list:
+    """Expected sequence of VISIBLE (inked) strokes in the converted .pli, with the brush pressure
+    profile for each (None = use style taper). Fill-only elements produce zero-width strokes,
+    which pressure patching skips, so they are not listed."""
+    out = []
+    for e in els:
+        if e.stroke and e.width > 0:
+            out += [e.pressure] * len(e.contours)
+    return out
 
 
 # ------------------------------------------------------------------ outputs

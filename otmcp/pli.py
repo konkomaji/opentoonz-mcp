@@ -142,7 +142,8 @@ def _smooth_noise(n: int, rng: random.Random, knots: int = 4) -> list[float]:
 
 def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28, min_ratio: float = 0.12,
                    pressure_var: float = 0.25, loop_var: float = 0.35, seed: int = 0,
-                   only_frames: set[int] | None = None) -> int:
+                   only_frames: set[int] | None = None, profiles: dict[int, list] | None = None,
+                   report: dict | None = None) -> int:
     """Give strokes a hand-inked pressure profile by rewriting thickness bytes in place.
 
     Open strokes: tapered ends (brush lift) + smooth pressure wobble.
@@ -151,6 +152,25 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
     Hidden zero-width strokes (fill boundaries) are left untouched. Returns strokes patched."""
     data, strokes = read(path)
     count = 0
+    # brush profiles: map the k-th visible stroke of a frame to profiles[frame][k]
+    visible_idx: dict[int, int] = {}
+    stroke_prof: dict[int, list] = {}
+    mismatch: list[int] = []
+    if profiles:
+        per_frame: dict[int, list[int]] = {}
+        for si, s in enumerate(strokes):
+            if max(t for _, _, t in s.points) > 0:
+                per_frame.setdefault(s.frame, []).append(si)
+        for fr, prof in profiles.items():
+            idx = per_frame.get(fr, [])
+            if len(idx) != len(prof):
+                mismatch.append(fr)
+                continue
+            for si, pr in zip(idx, prof):
+                if pr:
+                    stroke_prof[si] = pr
+    if report is not None:
+        report["profile_mismatch_frames"] = mismatch
     for si, s in enumerate(strokes):
         if only_frames is not None and s.frame not in only_frames:
             continue
@@ -164,6 +184,12 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
             acc.append(acc[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
         total = acc[-1] or 1.0
         noise = _smooth_noise(len(s.points), rng, knots=3 if s.loop else 4)
+        if si in stroke_prof:
+            from .art import sample_profile
+            for i, off in enumerate(s.thick_offsets):
+                data[off] = max(1, min(255, round(data[off] * sample_profile(stroke_prof[si], acc[i] / total))))
+            count += 1
+            continue
         for i, off in enumerate(s.thick_offsets):
             u = acc[i] / total
             if s.loop:

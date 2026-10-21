@@ -391,6 +391,12 @@ def _write_drawing(c: Ctx, layer: str, did: int, shapes: list[dict], force: bool
             f = _svg_file(c.st, layer, tid)
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(vec.to_svg(els, W, H, c.doc.dpi()), encoding="utf-8")
+            prof = vec.ink_profiles(els)
+            side = f.with_suffix(".prof.json")
+            if any(prof):
+                side.write_text(json.dumps(prof), encoding="utf-8")
+            else:
+                side.unlink(missing_ok=True)
         else:
             f = _png_file(c.st, layer, tid)
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -420,8 +426,8 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
             skipped.append(lname)
             continue
         valid = {int(d) + BOIL_BASE * v for d in L["drawings"] for v in ((0, 1, 2) if L.get("boil") else (0,))}
-        for f in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*.svg"):
-            m = re.match(rf"{re.escape(lname)}\.(\d+)\.svg$", f.name)
+        for f in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*"):
+            m = re.match(rf"{re.escape(lname)}\.(\d+)\.(svg|prof\.json)$", f.name)
             if m and int(m.group(1)) not in valid:
                 f.unlink()
         svgs = sorted((SVG_DIR / st["name"] / lname).glob(f"{lname}.*.svg"))
@@ -449,14 +455,27 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
             failed.append(lname)
             continue
         s = styles.get(L.get("style") or st["style"])
+        profiles = {}
+        for side in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*.prof.json"):
+            m = re.match(rf"{re.escape(lname)}\.(\d+)\.prof\.json$", side.name)
+            if m:
+                profiles[int(m.group(1))] = json.loads(side.read_text(encoding="utf-8"))
+        rep: dict = {}
         n = pli.pressure_patch(str(pf), s["taper_start"], s["taper_end"], s["min_ratio"], s["pressure_var"],
-                               s["loop_var"], seed=zlib.crc32(lname.encode()) & 0xFFFF)
+                               s["loop_var"], seed=zlib.crc32(lname.encode()) & 0xFFFF,
+                               profiles=profiles or None, report=rep)
+        if rep.get("profile_mismatch_frames"):
+            learn.add("warning", f"brush pressure skipped on layer '{lname}' frames "
+                                 f"{rep['profile_mismatch_frames']}: stroke count differs after OpenToonz import")
         _, strokes = pli.read(str(pf))
         frames_in_pli = sorted({sk.frame for sk in strokes})
         L["dirty"] = False
         L["pli_hash"] = file_hash(pf)
         L["gui_edited"] = False
-        done.append({"layer": lname, "strokes": len(strokes), "pressure_strokes": n, "frames": len(frames_in_pli)})
+        item = {"layer": lname, "strokes": len(strokes), "pressure_strokes": n, "frames": len(frames_in_pli)}
+        if rep.get("profile_mismatch_frames"):
+            item["brush_pressure_skipped_frames"] = rep["profile_mismatch_frames"]
+        done.append(item)
     _save_state(st)
     res = {"compiled": done, "seconds": round(time.time() - t0, 1)}
     if failed:
@@ -843,6 +862,8 @@ def draw(scene: str, layer: str, frame: int, shapes: list[dict], force: bool = F
     Shapes (canvas px, origin top-left), painted in order:
       circle{x,y,r} ellipse{x,y,rx,ry,rotation} rect{x,y,w,h,radius,rotation} (x,y=top-left)
       polygon{points,smooth} path{points,smooth=true,closed} text{x,y,text,size,anchor='mm'}
+      svgpath{d:'M.. C.. A.. Z', transform?} - any SVG path data (detailed art: hair, hands, folds)
+      brush{points:[[x,y,pressure 0-1],...], width:px max, color} - inked stroke with per-point pressure
     Paint/ink: fill, stroke, stroke_width (px; default from style), opacity, interior=true (thinner
     interior line), trace_line=true (iro-tore coloured line), shadow=true|{light:deg,depth:px,color}
     (anime cel shadow; light 90=top, 135=top-left), human=false (perfect geometry), wobble (px).
