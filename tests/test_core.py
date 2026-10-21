@@ -155,3 +155,32 @@ def test_clean_style_no_wobble():
 def test_shadow_color_darker():
     s = style.shadow_color((200, 150, 100, 255))
     assert sum(s[:3]) < 450
+
+
+# ------------------------------------------------------------------ exact interpolation (curve.py)
+from otmcp import curve
+
+
+def test_ease_in_written_negative():
+    """OpenToonz reads arrival ease as -speedIn.x; a positive value silently kills the slow-in."""
+    d = new_doc(1)
+    d.set_param("Col1", "x", [{"frame": 0, "value": 0.0, "interp": "ease", "ease_out": 30},
+                              {"frame": 10, "value": 1.0, "interp": "ease", "ease_in": 30}])
+    k = SceneDoc(T.parse(d.text())).get_params("Col1")["x"]["keys"][1]
+    assert k["speed_in"][0] < 0 and k["ease_in"] == 30
+
+
+def test_ease_symmetric_and_bounded():
+    ks = [{"frame": 0, "value": 0.0, "type": "Ep", "speed_out": (33, 0)},
+          {"frame": 24, "value": 1.0, "type": "L", "speed_in": (-33, 0)}]
+    vals = [curve.value_at(ks, f) for f in range(25)]
+    assert vals[0] == 0 and vals[-1] == 1
+    assert all(b >= a for a, b in zip(vals, vals[1:]))
+    assert abs(vals[6] - (1 - vals[18])) < 1e-9  # symmetric slow-in/slow-out
+
+
+def test_exponential_and_constant():
+    ks = [{"frame": 0, "value": 1.0, "type": "Exp"}, {"frame": 10, "value": 0.5, "type": "L"}]
+    assert abs(curve.value_at(ks, 5) - math.sqrt(0.5)) < 1e-9
+    kc = [{"frame": 0, "value": 3.0, "type": "C"}, {"frame": 10, "value": 7.0, "type": "L"}]
+    assert curve.value_at(kc, 9.9) == 3.0 and curve.value_at(kc, 10) == 7.0

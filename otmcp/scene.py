@@ -401,8 +401,17 @@ class SceneDoc:
                 if k.name in ("Ep", "E") and len(t) > 2:
                     key["ease_out"] = float(t[2])
                 prev = k.find("prev")
-                if prev is not None and len(prev.tokens()) > 1 and k.name:
-                    key["ease_in"] = float(prev.tokens()[1])
+                if prev is not None and len(prev.tokens()) > 1:
+                    key["speed_in"] = (float(prev.tokens()[1]),
+                                       float(prev.tokens()[2]) if len(prev.tokens()) > 2 else 0.0)
+                    key["ease_in"] = abs(key["speed_in"][0])
+                if k.name == "S" and len(t) > 3:
+                    key["speed_out"] = (float(t[2]), float(t[3]))
+                elif k.name in ("Ep", "E") and len(t) > 2:
+                    key["speed_out"] = (float(t[2]), 0.0)
+                key["type"] = k.name
+                if k.attrs.get("step"):
+                    key["step"] = int(k.attrs["step"])
                 out_params = info["keys"]
                 out_params.append(key)
             out[tag] = info
@@ -431,8 +440,11 @@ class SceneDoc:
                     if pc == "L":
                         kid.children.append(Node("prev", children=[T.fmt(float(k["value"]))]))
                     elif pc in ("Ep", "E"):
-                        kid.children.append(Node("prev", children=[T.fmt(float(k["value"])),
-                                                                   T.fmt(float(k.get("ease_in", 33.0 if pc == "Ep" else 3)))]))
+                        # incoming ease is stored as speedIn.x, which OpenToonz reads as -speedIn.x
+                        # (tdoubleparam.cpp getEaseInOutValue: e1 = max(-k1.m_speedIn.x, 0)); a positive
+                        # value silently disables the slow-in.
+                        ein = abs(float(k.get("ease_in", 33.0 if pc == "Ep" else 3)))
+                        kid.children.append(Node("prev", children=[T.fmt(float(k["value"])), T.fmt(-ein)]))
                     elif pc == "S":
                         kid.children.append(Node("prev", children=[T.fmt(float(k["value"])), "-3", "0"]))
                 body = [str(int(k["frame"])), T.fmt(float(k["value"]))]

@@ -32,7 +32,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image as McpImage
 
-from . import draw as drawlib, learn, pli, style as styles, tnz, vec
+from . import curve, draw as drawlib, learn, pli, style as styles, tnz, vec
 from .scene import Cell, SceneDoc, file_hash
 
 OT_HOME = Path(os.environ.get("OPENTOONZ_HOME", r"D:\OpenToonz"))
@@ -1112,19 +1112,11 @@ def animate_action(scene: str, target: str, start: int, end: int, to: dict, from
     return c.commit({"target": sid, "keys": report})
 
 
-def _value_at(info: dict, frame0: int, dpi: float, tag: str) -> float:
-    """Approximate value (px units) at 0-based frame: linear between keys (good enough for start values)."""
-    ks = [k for k in info["keys"] if "value" in k]
+def _value_at(info: dict, frame0: float, dpi: float, tag: str) -> float:
+    """Exact value (tool units: px / deg / factor) at 0-based frame, using the OpenToonz evaluator."""
     conv = (lambda v: v * dpi) if tag == "x" else (lambda v: -v * dpi) if tag == "y" else (lambda v: v)
-    if not ks:
-        return conv(info["default"])
-    if frame0 <= ks[0]["frame"]:
-        return conv(ks[0]["value"])
-    for a, b in zip(ks, ks[1:]):
-        if a["frame"] <= frame0 <= b["frame"]:
-            t = (frame0 - a["frame"]) / max(1, b["frame"] - a["frame"])
-            return conv(a["value"] + (b["value"] - a["value"]) * t)
-    return conv(ks[-1]["value"])
+    ks = [k for k in info["keys"] if "value" in k]
+    return conv(curve.value_at(ks, frame0, info["default"]))
 
 
 def _plate_check(c: Ctx, x0: float, y0: float, x1: float, y1: float, parallax: dict | None = None,

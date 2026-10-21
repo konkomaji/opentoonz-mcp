@@ -73,3 +73,30 @@ def test_undo(scene):
 def test_error_is_reported():
     with pytest.raises(RuntimeError):
         S.draw("qa_does_not_exist", "x", 1, [])
+
+
+def test_evaluator_matches_opentoonz_render(tmp_path):
+    """Render a keyed dot through tcomposer and compare per-frame position with curve.value_at (<1.5 px)."""
+    import subprocess
+    from PIL import Image, ImageChops, ImageDraw
+    from otmcp import curve, tnz
+    im = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse([950, 530, 970, 550], fill=(255, 0, 0, 255))
+    (tmp_path / "dr").mkdir()
+    im.save(tmp_path / "dr" / "dot.0001.png")
+    lv = tnz.Level("dot", (tmp_path / "dr" / "dot..png").as_posix())
+    doc = SceneDoc.new(tnz.Scene(frames=21, levels=[lv], columns=[tnz.Column(lv, [1] * 21)]))
+    keys = [{"frame": 0, "value": -6.0, "interp": "ease", "ease_out": 25},
+            {"frame": 12, "value": 2.0, "interp": "speed", "ease_in": 40},
+            {"frame": 20, "value": 6.0, "interp": "linear"}]
+    doc.set_param("Col1", "x", keys)
+    f = tmp_path / "s.tnz"
+    doc.save(f)
+    subprocess.run([str(S.OT_HOME / "tcomposer.exe"), str(f), "-o", str(tmp_path / "o" / "o.png")],
+                   cwd=S.OT_HOME, capture_output=True)
+    ck = SceneDoc.load(f).get_params("Col1")["x"]["keys"]
+    for fr in range(21):
+        r, g, _ = Image.open(tmp_path / "o" / f"o.{fr + 1:04d}.png").convert("RGB").split()
+        bb = ImageChops.subtract(r, g).point(lambda v: 255 if v > 120 else 0).getbbox()
+        x = ((bb[0] + bb[2]) / 2 - 960) / 120
+        assert abs(x - curve.value_at(ck, fr)) * 120 < 1.5, fr
