@@ -1,6 +1,6 @@
 # Releasing
 
-Releases are cut from `main` by pushing a version tag. Automation does everything after the tag.
+I cut releases from `main` by pushing a version tag. Automation handles everything after the tag, so a release is only as good as the checklist below.
 
 ## Checklist
 

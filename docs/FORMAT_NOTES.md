@@ -1,5 +1,7 @@
 # OpenToonz file-format notes (verified)
 
+These are the OpenToonz facts my code depends on. I didn't trust any of them until I had checked each one twice: once in the OpenToonz **v1.8.0** C++ source, and once by rendering with OpenToonz's own `tcomposer`. Where the two disagreed, I believed the render.
+
 Facts the MCP depends on. Every item was checked in two ways: against the OpenToonz **v1.8.0** C++ source (downloaded to `.cache/src/`) and by rendering with the installed `tcomposer.exe`. The source file is given for each item.
 
 ## Install facts (this machine)

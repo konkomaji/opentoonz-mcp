@@ -6,7 +6,7 @@
 
 AI systems can now produce moving images, but the output is usually a flat video. An animator can't retime it, redraw it, or pass it down a production pipeline.
 
-This paper describes OpenToonz MCP, a Model Context Protocol server. It lets an AI assistant author animation *inside* OpenToonz, the open-source descendant of the Toonz software Studio Ghibli used, so the result is a normal production scene: native vector levels, xsheet timing, pegbar hierarchies, keyframes and camera moves.
+In this paper I describe OpenToonz MCP, a Model Context Protocol server I built. It lets an AI assistant author animation *inside* OpenToonz, the open-source descendant of the Toonz software Studio Ghibli used, so the result is a normal production scene: native vector levels, xsheet timing, pegbar hierarchies, keyframes and camera moves.
 
 Five ideas make it work:
 
@@ -37,9 +37,9 @@ The design builds on exactly these.
 
 ## 2. Method: reading the source, verifying against the renderer
 
-Every format fact the server depends on was derived from the OpenToonz **v1.8.0** C++ source and then confirmed by rendering with the installed `tcomposer`. Rendering is the final arbiter.
+I derived every format fact the server depends on from the OpenToonz **v1.8.0** C++ source, then confirmed it by rendering with the installed `tcomposer`. Whenever reading and rendering disagreed, I trusted the render.
 
-This method caught problems that reading alone would have missed:
+This caught problems I would have missed by reading alone:
 
 - **Arrival ease is signed.** OpenToonz reads the incoming ease of an ease segment as `−speedIn.x` (`getEaseInOutValue`). A positive value is silently clamped to zero, which disables the slow-in. Rendering a keyed dot frame by frame exposed the difference immediately.
 - **Columns need terminal fx.** A scene without `<fxnodes><terminal>` references to each column's fx loads fine but renders blank.
@@ -159,4 +159,4 @@ Lessons accumulate across sessions from tool errors, verification problems, rend
 
 ## Acknowledgements
 
-This work stands on [OpenToonz](https://github.com/opentoonz/opentoonz) and the decades of production knowledge in it. Thanks to DWANGO, Digital Video, Studio Ghibli and the OpenToonz contributors. The animation principles referenced come from the classic literature of the craft, notably Thomas and Johnston's *The Illusion of Life* and Richard Williams' *The Animator's Survival Kit*.
+My work stands on [OpenToonz](https://github.com/opentoonz/opentoonz) and the decades of production knowledge in it. Thanks to DWANGO, Digital Video, Studio Ghibli and the OpenToonz contributors. The animation principles referenced come from the classic literature of the craft, notably Thomas and Johnston's *The Illusion of Life* and Richard Williams' *The Animator's Survival Kit*.

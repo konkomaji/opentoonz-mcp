@@ -1,5 +1,7 @@
 # Architecture (developer guide)
 
+This is how I structured the server, and the rules I follow when I change it. The guiding idea: the assistant may only ever touch an OpenToonz scene through a transaction it can undo, and everything it writes must be something OpenToonz itself would write.
+
 ```
 MCP client ──stdio──► otmcp.server (FastMCP, 44 tools)
                           │  every scene-changing call: lock → snapshot → edit → verify → write → journal
