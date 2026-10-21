@@ -30,6 +30,22 @@ STYLES: dict[str, dict] = {
 }
 
 
+RULES = """Studio defaults used by the tools (24 fps, 1080p):
+- Exposure: anime on 3s, feature/cartoon on 2s; ones for camera moves, fast action and impacts.
+- Key holds >= 6 frames; after 16 dead frames use a moving hold (2-5% drift).
+- Walk 12 f/step (brisk 8, slow 16); run 6-8 f/step; blink 6 f (2 close, 2 shut, 2 open).
+- Anticipation 10-25% of the move's size and 15-35% of its time (min 3 f); overshoot 10%, settle x0.45.
+- Squash/stretch keeps area (sx*sy = 1): 0.8-1.25 realistic, 0.6-1.6 anime action, 0.5-2.0 cartoon.
+- Spacing p(t) = t^a/(t^a+(1-t)^a), a=2 (3 for snappy); arcs bow 10-20% of the chord.
+- Lines: anime 2 px (interior x0.7), feature 3.5 px, tapered ends; wobble 0.3-0.5 px at 80 px wavelength.
+- Cel shadow: hue 8deg toward blue (warm skin toward red), sat +10%, value -18%.
+- Parallax vs character layer: FG 1.8, mid BG 0.6, far BG 0.3, sky 0.05.
+- Pans <= 10 px/frame on detailed BGs (<= 20 soft); > 32 px/frame is a whip pan.
+- Trucks ease >= 8 frames with exponential scale; shake 8 px decaying x0.7/frame.
+- No more than 3 large luminance flashes per second.
+"""
+
+
 def get(name: str | None) -> dict:
     """Preset merged with persistent learned overrides (learn.tune_style)."""
     from . import learn

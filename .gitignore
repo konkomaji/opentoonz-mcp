@@ -3,3 +3,6 @@
 work/
 __pycache__/
 *.pyc
+
+# local research notes and session devlog (not published)
+research/

@@ -43,7 +43,7 @@ OT_HOME = Path(os.environ.get("OPENTOONZ_HOME", r"D:\OpenToonz"))
 OT_STUFF = Path(os.environ.get("OPENTOONZ_STUFF", r"D:\OpenToonz stuff"))
 PROJECT = OT_STUFF / "sandbox"
 WORK = Path(os.environ.get("OTMCP_WORK", r"D:\otmcp\work"))
-DOCS = Path(__file__).resolve().parent.parent / "docs"
+RESEARCH = Path(os.environ.get("OTMCP_RESEARCH", Path(__file__).resolve().parent.parent / "research"))
 STATE_DIR, RENDER_DIR, SNAP_DIR = WORK / "state", WORK / "renders", WORK / "snapshots"
 JOURNAL_DIR, NOTES_DIR, SVG_DIR, TMP = WORK / "journal", WORK / "notes", WORK / "svg", WORK / "tmp"
 MAX_SNAPSHOTS = 30
@@ -775,12 +775,14 @@ def style_guide(topic: str = "rules") -> str:
     """Studio animation rules (Ghibli/Disney/anime practice) with numbers: timing, spacing, squash,
     line weight, shading, camera. topic: 'rules' (numbered defaults) | 'full' | 'styles'."""
     if topic == "styles":
-        return json.dumps(styles.STYLES, indent=1)
-    p = DOCS / "studio_practices.md"
+        return json.dumps({k: styles.get(k) for k in styles.STYLES}, indent=1)
+    p = RESEARCH / "studio_practices.md"  # optional local research notes
     text = p.read_text(encoding="utf-8") if p.exists() else ""
-    if topic == "rules" and "## Rules to encode" in text:
-        return text[text.index("## Rules to encode"):]
-    return text[:60000]
+    if topic == "rules":
+        if "## Rules to encode" in text:
+            return text[text.index("## Rules to encode"):]
+        return styles.RULES
+    return text[:60000] or styles.RULES
 
 
 @tool
