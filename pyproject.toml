@@ -25,7 +25,7 @@ classifiers = [
   "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-  "mcp[cli]>=1.20,<2",
+  "mcp[cli]>=1.20,<3",
   "pillow>=10",
   "shapely>=2.0",
   "fonttools>=4.40",
