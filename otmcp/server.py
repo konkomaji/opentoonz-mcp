@@ -36,7 +36,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image as McpImage
 
-from . import assets, curve, draw as drawlib, learn, pli, style as styles, tnz, vec
+from . import assets, curve, draw as drawlib, learn, physics, pli, style as styles, tnz, vec
 from .scene import Cell, SceneDoc, file_hash
 
 OT_HOME = Path(os.environ.get("OPENTOONZ_HOME", r"D:\OpenToonz"))
@@ -1385,6 +1385,17 @@ def camera_move(scene: str, kind: str, start: int, end: int | None = None, dx: f
                                  {"frame": end, "value": zoom, "interp": "ease"}])
         if end - start < 8:
             c.warnings.append("trucks under 8 frames read as a jump cut")
+    elif kind == "trauma":
+        n = (end - start) if end else 24
+        shake = physics.trauma_shake(n, trauma=min(1.0, strength / 24.0) ** 0.5 if strength else 1.0,
+                                     max_offset=24.0, seed=start)
+        for tag, key in (("x", "x"), ("y", "y"), ("rot", "rot")):
+            base = _param_series(c, cam, tag, start, start)[0]
+            _bake(c, cam, tag, [(start + s_["frame"], base + (s_[key] if tag != "y" else s_[key]))
+                                for s_ in shake] + [(start + n, base)], 0.1)
+        w = _plate_check(c, -24, -24, 24, 24, margin=0.0)
+        if w:
+            c.warnings.append(w)
     elif kind == "shake":
         frames = 10
         rng = random.Random(start)
@@ -1402,7 +1413,7 @@ def camera_move(scene: str, kind: str, start: int, end: int | None = None, dx: f
         if w:
             c.warnings.append(w)
     else:
-        raise ValueError("kind must be pan, truck or shake")
+        raise ValueError("kind must be pan, truck, shake or trauma")
     return c.commit(res)
 
 
@@ -1484,6 +1495,242 @@ def save_part(name: str, shapes: list[dict], anchor: list[float] | None = None,
 def list_parts() -> list[dict]:
     """Parts in the model-sheet library with their variants."""
     return assets.list_parts()
+
+
+def _bake(c: Ctx, sid: str, tag: str, samples: list[tuple[int, float]], tol: float = 0.25) -> int:
+    """Write per-frame samples (1-based frame, tool units) as the fewest linear keys that reproduce every
+    frame within tol; replaces keys only inside the sampled range. Returns key count."""
+    if not samples:
+        return 0
+    keys = physics.thin(samples, tol)
+    _set_keys(c, sid, tag, [{"frame": f, "value": v, "interp": "linear"} for f, v in keys],
+              replace_range=(samples[0][0], samples[-1][0]))
+    return len(keys)
+
+
+def _param_series(c: Ctx, sid: str, tag: str, start: int, end: int) -> list[float]:
+    """Exact per-frame values (tool units) of a stage-object param, as OpenToonz evaluates them."""
+    info = c.doc.get_params(sid).get(tag) or {"keys": [], "default": 1.0 if tag in ("sc", "sx", "sy") else 0.0}
+    return [_value_at(info, f - 1, c.doc.dpi(), tag) for f in range(start, end + 1)]
+
+
+def _pivot_warning(c: Ctx, sid: str) -> None:
+    if c.doc.pivot(sid) == (0.0, 0.0) and sid.startswith(("Col", "Peg")):
+        c.warnings.append(f"{sid} pivot is at the camera centre: scaling/rotation will swing the drawing "
+                          f"around the screen centre. Call set_pivot first (anchor='bottom' for squash, "
+                          f"or x,y at the attachment point for hair/tails).")
+
+
+@tool
+def physics_bounce(scene: str, target: str, start: int, height: float, fall_frames: float | None = None,
+                   material: str = "rubber_ball", bounces: int = 4, travel_x: float = 0.0,
+                   squash: bool = True, start_on_ground: bool = False) -> dict:
+    """Physically exact bouncing (gravity parabolas, coefficient of restitution) on a layer/peg.
+    The drawing must rest on the ground line; y offsets go UP from there. height px.
+    fall_frames: frames for the first drop (default: real gravity for a 1.7 m character = 1080 px tall,
+    i.e. 14.1*sqrt(height/1080)). material: rubber_ball | table_tennis | basketball | tennis |
+    soft_rubber | bowling | balloon (sets restitution and squash). travel_x: px moved over the whole bounce,
+    slowing with each contact. squash: area-preserving contact squash (set_pivot at the feet first)."""
+    mats = physics.recipes()["bounce"]["materials"]
+    if material not in mats:
+        raise ValueError(f"material must be one of {list(mats)}")
+    if height <= 0:
+        raise ValueError("height must be > 0")
+    c = Ctx(scene, "physics_bounce", {"target": target, "start": start, "height": height, "material": material})
+    sid = c.stage_id(target)
+    mat = mats[material]
+    e = float(mat["e"])
+    W, H = c.doc.camera_res()
+    N = float(fall_frames or max(3.0, 14.1 * math.sqrt(height / H)))
+    samples = physics.bounce(height, N, e, bounces, start_on_ground)
+    base_y = _param_series(c, sid, "y", start, start)[0]
+    ys = [(start + s_["frame"], base_y - s_["h"]) for s_ in samples]
+    nkeys = _bake(c, sid, "y", ys)
+    res = {"target": sid, "frames": len(samples), "first_fall_frames": round(N, 2), "restitution": e,
+           "y_keys": nkeys}
+    if travel_x:
+        # horizontal speed drops by vx_loss at every contact
+        loss = float(mat.get("vx_loss_per_bounce", 0.1))
+        v, xs, x = 1.0, [], 0.0
+        for s_ in samples:
+            xs.append(x)
+            if s_["contact"] and s_["frame"]:
+                v *= (1 - loss)
+            x += v
+        k = travel_x / max(xs[-1], 1e-9)
+        bx = _param_series(c, sid, "x", start, start)[0]
+        res["x_keys"] = _bake(c, sid, "x", [(start + i, bx + xv * k) for i, xv in enumerate(xs)])
+    if squash:
+        _pivot_warning(c, sid)
+        sy, n_contact = [], 0
+        smax = float(mat.get("max_stretch", 1.2))
+        vmax = max(abs(s_["v"]) for s_ in samples) or 1.0
+        for s_ in samples:
+            if s_["contact"] and s_["frame"]:
+                val = physics.squash_for(mat, n_contact, e)
+                n_contact += 1
+            else:
+                val = 1 + (smax - 1) * min(1.0, abs(s_["v"]) / vmax) ** 2
+            sy.append((start + s_["frame"], val))
+        res["squash_keys"] = _bake(c, sid, "sy", sy, 0.005)
+        _bake(c, sid, "sx", [(f, 1 / v) for f, v in sy], 0.005)  # area preserved: sx*sy = 1
+    end = start + samples[-1]["frame"]
+    if end > c.st["frames"]:
+        c.warnings.append(f"bounce ends at frame {end}, past the scene end {c.st['frames']}")
+    return c.commit(res)
+
+
+@tool
+def physics_jump(scene: str, target: str, start: int, height: float, air_frames: int | None = None,
+                 style: str = "feature") -> dict:
+    """Recipe jump on a layer/peg: anticipation crouch -> takeoff stretch -> exact parabola -> landing
+    squash -> recovery. style: realistic | feature | cartoon (crouch depth, stretch and squash amounts).
+    air_frames default: real gravity for the scene height (1.7 m character = frame height)."""
+    presets = {"realistic": (0.08, 1.04, 0.95, 8), "feature": (0.15, 1.10, 0.90, 6), "cartoon": (0.25, 1.25, 0.78, 8)}
+    if style not in presets:
+        raise ValueError(f"style must be one of {list(presets)}")
+    c = Ctx(scene, "physics_jump", {"target": target, "start": start, "height": height, "style": style})
+    sid = c.stage_id(target)
+    W, H = c.doc.camera_res()
+    crouch_k, stretch, land, cf = presets[style]
+    T = int(air_frames or max(6, round(2 * 14.1 * math.sqrt(height / H))))
+    j = physics.jump(height, T, crouch=crouch_k * 0.25 * H * 0.5, crouch_frames=cf, takeoff_stretch=stretch,
+                     land_squash=land)
+    by = _param_series(c, sid, "y", start, start)[0]
+    _pivot_warning(c, sid)
+    res = {"target": sid, "frames": j["frames"], "air_frames": T,
+           "y_keys": _bake(c, sid, "y", [(start + i, by + v) for i, v in enumerate(j["y"])]),
+           "sy_keys": _bake(c, sid, "sy", [(start + i, v) for i, v in enumerate(j["sy"])], 0.005)}
+    _bake(c, sid, "sx", [(start + i, 1 / v) for i, v in enumerate(j["sy"])], 0.005)
+    return c.commit(res)
+
+
+@tool
+def follow_through(scene: str, target: str, driver: str, start: int, end: int, param: str = "x",
+                   target_param: str | None = None, frequency: float = 2.5, damping: float = 0.45,
+                   response: float = 0.0, gain: float = 1.0, mode: str = "offset") -> dict:
+    """Overlapping action / follow-through from a damped spring (second-order system).
+    The target reacts to the driver's motion (driver's `param`, exact OpenToonz values).
+    mode 'follow': target_param = spring(driver)  (a separate object trailing the driver).
+    mode 'offset': target_param = gain * (spring(driver) - driver)  (a part PARENTED to the driver:
+      hair, ears, tail, cloth; use target_param='rotation' with gain in deg per px for a swing).
+    frequency Hz (hair 2-2.5, ears 3, belly 4-5, cape 1.2), damping 0.25-0.5 (overshoot 15-45%),
+    response < 0 anticipates. Keep frequency <= 4 Hz on ones, <= 2.5 Hz on twos (aliasing)."""
+    if mode not in ("offset", "follow"):
+        raise ValueError("mode must be 'offset' or 'follow'")
+    if end <= start:
+        raise ValueError("end must be after start")
+    if frequency <= 0 or damping <= 0:
+        raise ValueError("frequency and damping must be > 0")
+    c = Ctx(scene, "follow_through", {"target": target, "driver": driver, "param": param, "f": frequency,
+                                      "zeta": damping, "mode": mode})
+    sid, did = c.stage_id(target), c.stage_id(driver)
+    tag, ttag = KEY_TAGS.get(param, param), KEY_TAGS.get(target_param or param, target_param or param)
+    if tag not in KEY_TAGS.values() or ttag not in KEY_TAGS.values():
+        raise ValueError(f"param must be one of {list(KEY_TAGS)}")
+    xs = _param_series(c, did, tag, start, end)
+    ys = physics.second_order(xs, frequency, damping, response, fps=c.doc.fps())
+    if mode == "follow":
+        out = ys
+    else:
+        base = _param_series(c, sid, ttag, start, start)[0]
+        out = [base + gain * (y - x) for x, y in zip(xs, ys)]
+    if frequency > 4:
+        c.warnings.append("frequency above 4 Hz aliases at 24 fps; the wobble will read as jitter")
+    if ttag in ("rot", "sc", "sx", "sy"):
+        _pivot_warning(c, sid)
+    n = _bake(c, sid, ttag, [(start + i, v) for i, v in enumerate(out)], 0.05 if ttag in ("rot",) else 0.25)
+    return c.commit({"target": sid, "driver": did, "keys": n,
+                     "overshoot_pct": round(100 * physics.overshoot_ratio(damping), 1)})
+
+
+@tool
+def camera_follow(scene: str, target: str, start: int, end: int, smooth_time: float = 7.0,
+                  axis: str = "x", offset: float = 0.0) -> dict:
+    """Follow a layer/peg with the camera using critically damped smoothing (game-camera SmoothDamp).
+    smooth_time in frames (7 = 0.3 s); axis x | y | xy; offset px added to the followed position."""
+    if axis not in ("x", "y", "xy"):
+        raise ValueError("axis must be x, y or xy")
+    c = Ctx(scene, "camera_follow", {"target": target, "start": start, "end": end, "axis": axis})
+    sid = c.stage_id(target)
+    cam = c.doc.active_camera().attrs["id"]
+    res = {"camera": cam}
+    for a in (("x", "y") if axis == "xy" else (axis,)):
+        tgt = [v + offset for v in _param_series(c, sid, a, start, end)]
+        cur = physics.smooth_damp(tgt, smooth_time)
+        res[f"{a}_keys"] = _bake(c, cam, a, [(start + i, v) for i, v in enumerate(cur)])
+        lo, hi = min(cur) - cur[0], max(cur) - cur[0]
+        w = _plate_check(c, min(0, lo) if a == "x" else 0, min(0, lo) if a == "y" else 0,
+                         max(0, hi) if a == "x" else 0, max(0, hi) if a == "y" else 0)
+        if w:
+            c.warnings.append(w)
+    return c.commit(res)
+
+
+@tool
+def blink(scene: str, layer: str, start: int, open_drawing: int, closed_drawing: int,
+          half_drawing: int | None = None, pattern: str = "standard") -> dict:
+    """Insert a blink into a layer's xsheet at `start` (switches the layer to manual timing).
+    pattern: standard (H C C H) | quick | anime_twos | physiological | sleepy | double.
+    Drawings: the eye open/half/closed drawing numbers on that layer."""
+    charts = physics.recipes()["blink"]
+    if pattern not in charts or not isinstance(charts[pattern], list):
+        raise ValueError(f"pattern must be one of {[k for k, v in charts.items() if isinstance(v, list)]}")
+    c = Ctx(scene, "blink", {"layer": layer, "start": start, "pattern": pattern})
+    name = _safe(layer)
+    L = c.layer(name)
+    ids = {"O": open_drawing, "C": closed_drawing, "H": half_drawing or closed_drawing}
+    for v in ids.values():
+        if str(v) not in L["drawings"]:
+            raise ValueError(f"drawing {v} not on layer '{name}'")
+    ci = c.col_index(name)
+    cells = [int(x.fid) % BOIL_BASE if x and x.fid.isdigit() else 0 for x in c.doc.column_cells(ci)] if ci is not None else []
+    cells += [open_drawing] * max(0, c.st["frames"] - len(cells))
+    seq = physics.blink_cells(pattern, ids)
+    for i, d in enumerate(seq):
+        if start - 1 + i < len(cells):
+            cells[start - 1 + i] = d
+    L["timing"] = "manual"
+    _apply_cells(c, name, _boil_cycle(cells) if L.get("boil") else cells)
+    return c.commit({"layer": name, "frames": list(range(start, start + len(seq))), "cells": seq})
+
+
+@tool
+def lip_sync(scene: str, layer: str, text: str, start: int, part: str, x: float, y: float,
+             scale: float = 1.0, chart: str = "anime3", frames_per_syllable: int = 4) -> dict:
+    """Animate a mouth from text (no audio): each mouth shape is a VARIANT of a library part
+    (anime3: closed/half/open; blair: AI E O U WQ MBP FV L etc rest). Draws one drawing per shape on
+    the layer and writes the xsheet from `start` (2-frame minimum holds). Shift `start` 2 frames
+    earlier than the audio (mouths lead sound)."""
+    if chart not in ("anime3", "blair"):
+        raise ValueError("chart must be anime3 or blair")
+    p = assets.load_part(part)
+    shapes_seq = physics.text_to_mouth(text, frames_per_syllable, chart)
+    need = sorted(set(shapes_seq))
+    missing = [v for v in need if v not in p.get("variants", {}) and v != "default"]
+    if missing:
+        raise ValueError(f"part '{part}' lacks mouth variants {missing} (has {list(p.get('variants', {}))})")
+    c = Ctx(scene, "lip_sync", {"layer": layer, "text": text[:80], "start": start, "part": part})
+    name = _safe(layer)
+    L = c.layer(name)
+    base = max([int(k) for k in L["drawings"]] + [0])
+    ids = {}
+    for i, v in enumerate(need):
+        did = base + 1 + i
+        _check_drawing_id(did)
+        _write_drawing(c, name, did, [{"type": "part", "name": part, "variant": v, "x": x, "y": y, "scale": scale}])
+        ids[v] = did
+    ci = c.col_index(name)
+    cells = [int(q.fid) % BOIL_BASE if q and q.fid.isdigit() else 0 for q in c.doc.column_cells(ci)] if ci is not None else []
+    end = start - 1 + len(shapes_seq)
+    cells += [0] * max(0, end - len(cells))
+    for i, v in enumerate(shapes_seq):
+        cells[start - 1 + i] = ids[v]
+    L["timing"] = "manual"
+    _apply_cells(c, name, cells)
+    if end > c.st["frames"]:
+        c.st["frames"] = end
+    return c.commit({"layer": name, "frames": [start, end], "shapes": {v: ids[v] for v in need}})
 
 
 @tool

@@ -1,0 +1,1860 @@
+{
+ "version": 1,
+ "fps": 24,
+ "conventions": {
+  "frame_base": 0,
+  "y_up": true,
+  "angles": "degrees, + = CCW/forward",
+  "default_interp": "cos_ease"
+ },
+ "walk": {
+  "normal": {
+   "frames_per_step": 12,
+   "step_len_H": 0.41,
+   "exposure": [
+    1,
+    2
+   ],
+   "poses": {
+    "contact": 0,
+    "down": 3,
+    "passing": 6,
+    "up": 9
+   },
+   "poses_on_twos": {
+    "contact": 0,
+    "down": 2,
+    "passing": 6,
+    "up": 8
+   },
+   "body_y_H_keys": [
+    [
+     0,
+     0.0
+    ],
+    [
+     3,
+     -0.03
+    ],
+    [
+     6,
+     0.01
+    ],
+    [
+     9,
+     0.022
+    ],
+    [
+     12,
+     0.0
+    ]
+   ],
+   "body_y_H_per_frame": [
+    0.0,
+    -0.008,
+    -0.023,
+    -0.03,
+    -0.02,
+    0.0,
+    0.01,
+    0.013,
+    0.019,
+    0.022,
+    0.017,
+    0.006,
+    0.0
+   ],
+   "realistic_amplitude_scale": 0.5,
+   "head_delay_frames": 2,
+   "pelvis_tilt_deg_keys": [
+    [
+     0,
+     4
+    ],
+    [
+     6,
+     -3
+    ],
+    [
+     8,
+     -4
+    ],
+    [
+     12,
+     4
+    ]
+   ],
+   "torso_lean_deg": 4,
+   "arm_swing_deg": {
+    "amplitude": 22,
+    "extreme_at": "contact",
+    "zero_at": "passing",
+    "realistic": 15,
+    "cartoon": 32,
+    "lead_side_keys": [
+     [
+      0,
+      -22
+     ],
+     [
+      6,
+      0
+     ],
+     [
+      11,
+      22
+     ],
+     [
+      12,
+      22
+     ]
+    ],
+    "forearm_delay_frames": 2,
+    "forearm_extra_bend_forward_deg": [
+     15,
+     25
+    ],
+    "hand_delay_frames": 1
+   },
+   "planted_foot": {
+    "x_S_start": 0.25,
+    "x_S_end": -0.25,
+    "interp": "linear",
+    "world_slide": 0.0,
+    "angle_deg_keys": [
+     [
+      0,
+      15
+     ],
+     [
+      2,
+      0
+     ],
+     [
+      7,
+      0
+     ],
+     [
+      8,
+      -5
+     ],
+     [
+      11,
+      -35
+     ]
+    ]
+   },
+   "swing_foot": {
+    "x_S_per_frame": [
+     -0.25,
+     -0.24,
+     -0.205,
+     -0.15,
+     -0.087,
+     -0.035,
+     0.0,
+     0.05,
+     0.12,
+     0.19,
+     0.235,
+     0.25,
+     0.25
+    ],
+    "lift_H_per_frame": [
+     0.0,
+     0.01,
+     0.025,
+     0.04,
+     0.05,
+     0.05,
+     0.045,
+     0.035,
+     0.025,
+     0.015,
+     0.008,
+     0.002,
+     0.0
+    ],
+    "angle_deg_per_frame": [
+     -45,
+     -50,
+     -40,
+     -25,
+     -10,
+     0,
+     0,
+     5,
+     10,
+     15,
+     18,
+     17,
+     15
+    ]
+   },
+   "second_step": "mirror_left_right"
+  },
+  "variants": {
+   "brisk": {
+    "frames_per_step": 8,
+    "step_len_H": 0.45,
+    "body_y_H": {
+     "contact": 0,
+     "down": -0.035,
+     "passing": 0.01,
+     "up": 0.03
+    },
+    "arm_deg": 30,
+    "lean_deg": 6,
+    "foot_lift_H": 0.05
+   },
+   "casual": {
+    "frames_per_step": 16,
+    "step_len_H": 0.36,
+    "body_y_H": {
+     "contact": 0,
+     "down": -0.025,
+     "passing": 0.01,
+     "up": 0.015
+    },
+    "arm_deg": 15,
+    "lean_deg": 2,
+    "foot_lift_H": 0.04
+   },
+   "heavy": {
+    "frames_per_step": 16,
+    "step_len_H": 0.33,
+    "body_y_H": {
+     "contact": 0,
+     "down": -0.045,
+     "passing": 0.005,
+     "up": 0.008
+    },
+    "arm_deg": 12,
+    "lean_deg": 3,
+    "foot_lift_H": 0.025,
+    "down_frac": 0.33,
+    "down_hold_frames": 3
+   },
+   "light": {
+    "frames_per_step": 9,
+    "step_len_H": 0.4,
+    "body_y_H": {
+     "contact": 0,
+     "down": -0.015,
+     "passing": 0.015,
+     "up": 0.035
+    },
+    "arm_deg": 30,
+    "lean_deg": 2,
+    "foot_lift_H": 0.06
+   },
+   "old": {
+    "frames_per_step": 22,
+    "step_len_H": 0.25,
+    "body_y_H": {
+     "contact": 0,
+     "down": -0.02,
+     "passing": 0.0,
+     "up": 0.005
+    },
+    "arm_deg": 8,
+    "lean_deg": 12,
+    "foot_lift_H": 0.015
+   }
+  },
+  "pose_frame_rule": {
+   "down": 0.25,
+   "passing": 0.5,
+   "up": 0.75,
+   "round": true
+  },
+  "double_bounce": {
+   "frames_per_step": 12,
+   "body_y_H_keys": [
+    [
+     0,
+     0.0
+    ],
+    [
+     2,
+     -0.03
+    ],
+    [
+     4,
+     0.02
+    ],
+    [
+     6,
+     -0.02
+    ],
+    [
+     9,
+     0.025
+    ],
+    [
+     12,
+     0.0
+    ]
+   ],
+   "head_delay_frames": 1
+  },
+  "sneak": {
+   "tiptoe": {
+    "frames_per_step": 20,
+    "body_y_H": [
+     -0.06,
+     0.03
+    ],
+    "lean_deg": 20,
+    "foot_lift_H": 0.16,
+    "step_len_H": 0.4,
+    "foot_contact_ease": [
+     "ease_in_pow",
+     3
+    ],
+    "weight_shift_frames": 3
+   },
+   "crouch": {
+    "frames_per_step": 18,
+    "body_y_H": [
+     -0.11,
+     -0.09
+    ],
+    "lean_deg": 30,
+    "foot_lift_H": 0.08,
+    "step_len_H": 0.35
+   },
+   "back_lean": {
+    "frames_per_step": 22,
+    "body_y_H": [
+     -0.04,
+     0.02
+    ],
+    "lean_deg": -12,
+    "foot_lift_H": 0.12,
+    "step_len_H": 0.45,
+    "weight_lag_frames": 3
+   }
+  }
+ },
+ "run": {
+  "run8": {
+   "frames_per_step": 8,
+   "exposure": 1,
+   "step_len_H": 0.85,
+   "poses": {
+    "contact": 0,
+    "down": 2,
+    "push": 4,
+    "up": 6
+   },
+   "airborne_frames": [
+    5,
+    6,
+    7
+   ],
+   "body_y_H_per_frame": [
+    -0.02,
+    -0.045,
+    -0.06,
+    -0.045,
+    -0.01,
+    0.025,
+    0.04,
+    0.02,
+    -0.02
+   ],
+   "lean_deg_per_frame": [
+    12,
+    12,
+    13,
+    14,
+    15,
+    14,
+    13,
+    12,
+    12
+   ],
+   "arm_deg_per_frame": [
+    -40,
+    -38,
+    -30,
+    -15,
+    0,
+    15,
+    30,
+    38,
+    40
+   ],
+   "elbow_deg": 90,
+   "swing_knee_lift_H_per_frame": [
+    0.02,
+    0.05,
+    0.09,
+    0.12,
+    0.14,
+    0.15,
+    0.13,
+    0.09,
+    0.0
+   ]
+  },
+  "run6": {
+   "frames_per_step": 6,
+   "exposure": 1,
+   "step_len_H": 0.8,
+   "poses": {
+    "contact": 0,
+    "down": 1,
+    "push": 3,
+    "up": 4
+   },
+   "airborne_frames": [
+    4,
+    5
+   ],
+   "body_y_H_per_frame": [
+    -0.02,
+    -0.055,
+    -0.03,
+    0.0,
+    0.035,
+    0.015,
+    -0.02
+   ],
+   "lean_deg_per_frame": [
+    15,
+    16,
+    17,
+    18,
+    17,
+    16,
+    15
+   ],
+   "arm_deg_per_frame": [
+    -45,
+    -30,
+    -10,
+    15,
+    35,
+    45,
+    45
+   ]
+  },
+  "sprint4": {
+   "frames_per_step": 4,
+   "exposure": 1,
+   "step_len_H": 1.1,
+   "poses": {
+    "contact": 0,
+    "down": 1,
+    "push": 2,
+    "air": 3
+   },
+   "lean_deg": 25,
+   "arm_deg": 50
+  },
+  "lean_deg_by_speed": {
+   "jog": [
+    5,
+    10
+   ],
+   "run": [
+    10,
+    15
+   ],
+   "sprint": [
+    18,
+    25
+   ],
+   "accel_start": [
+    35,
+    45
+   ]
+  },
+  "step_len_H_by_speed": {
+   "jog": [
+    0.55,
+    0.65
+   ],
+   "run": [
+    0.75,
+    0.95
+   ],
+   "sprint": [
+    1.0,
+    1.3
+   ]
+  }
+ },
+ "bounce": {
+  "formulas": {
+   "y_after_apex": "h*(1-(k/N)**2)",
+   "spacing": "h*(2k-1)/N**2",
+   "hang_frames_real": "24*sqrt(2*h_m/9.81)",
+   "hang_frames_H": "14.1*sqrt(h/H)  # H=1.7m",
+   "height_n": "h0*e**(2n)",
+   "hang_n": "N0*e**n",
+   "bounces_to_1pct": "ceil(ln(0.01)/(2*ln(e)))",
+   "squash_n": "1-(1-squash0)*e**n",
+   "balloon_y": "h-(vt**2/g)*ln(cosh(g*t/vt))"
+  },
+  "apex_tables": {
+   "6": [
+    1.0,
+    0.972,
+    0.889,
+    0.75,
+    0.556,
+    0.306,
+    0.0
+   ],
+   "8": [
+    1.0,
+    0.984,
+    0.938,
+    0.859,
+    0.75,
+    0.609,
+    0.438,
+    0.234,
+    0.0
+   ],
+   "10": [
+    1.0,
+    0.99,
+    0.96,
+    0.91,
+    0.84,
+    0.75,
+    0.64,
+    0.51,
+    0.36,
+    0.19,
+    0.0
+   ],
+   "12": [
+    1.0,
+    0.993,
+    0.972,
+    0.938,
+    0.889,
+    0.826,
+    0.75,
+    0.66,
+    0.556,
+    0.438,
+    0.306,
+    0.16,
+    0.0
+   ]
+  },
+  "materials": {
+   "rubber_ball": {
+    "e": 0.87,
+    "e_range": [
+     0.85,
+     0.9
+    ],
+    "contact_squash": 0.7,
+    "max_stretch": 1.3,
+    "contact_frames": 1,
+    "vx_loss_per_bounce": 0.08,
+    "confidence": "SRC"
+   },
+   "table_tennis": {
+    "e": 0.9,
+    "e_range": [
+     0.887,
+     0.923
+    ],
+    "contact_squash": 0.95,
+    "max_stretch": 1.05,
+    "contact_frames": 1,
+    "vx_loss_per_bounce": 0.05,
+    "confidence": "SRC"
+   },
+   "basketball": {
+    "e": 0.76,
+    "e_range": [
+     0.758,
+     0.776
+    ],
+    "contact_squash": 0.85,
+    "max_stretch": 1.12,
+    "contact_frames": 1,
+    "vx_loss_per_bounce": 0.1,
+    "confidence": "SRC"
+   },
+   "tennis": {
+    "e": 0.74,
+    "e_range": [
+     0.71,
+     0.76
+    ],
+    "contact_squash": 0.8,
+    "max_stretch": 1.15,
+    "contact_frames": 1,
+    "vx_loss_per_bounce": 0.12,
+    "confidence": "CANON"
+   },
+   "soft_rubber": {
+    "e": 0.65,
+    "e_range": [
+     0.6,
+     0.7
+    ],
+    "contact_squash": 0.7,
+    "max_stretch": 1.25,
+    "contact_frames": 2,
+    "vx_loss_per_bounce": 0.12,
+    "confidence": "HEUR"
+   },
+   "bowling": {
+    "e": 0.22,
+    "e_range": [
+     0.15,
+     0.3
+    ],
+    "contact_squash": 1.0,
+    "max_stretch": 1.0,
+    "contact_frames": 1,
+    "vx_loss_per_bounce": 0.02,
+    "camera_shake_px": 6,
+    "confidence": "HEUR"
+   },
+   "balloon": {
+    "e": 0.5,
+    "e_range": [
+     0.4,
+     0.6
+    ],
+    "contact_squash": 0.6,
+    "max_stretch": 1.1,
+    "contact_frames": 3,
+    "recovery_frames": 5,
+    "terminal_velocity_mps": 1.5,
+    "spacing": "linear_after_accel",
+    "confidence": "HEUR"
+   }
+  },
+  "squash_stretch_phases": {
+   "apex": 1.0,
+   "falling": "1+0.35*v/vmax",
+   "last_air_frame": [
+    1.2,
+    1.35
+   ],
+   "contact": "material.contact_squash",
+   "after_contact_1": [
+    1.2,
+    1.3
+   ],
+   "after_contact_2": [
+    1.05,
+    1.1
+   ],
+   "round_by_rise_fraction": 0.33,
+   "area_preserving": "sx=1/sy"
+  }
+ },
+ "jump": {
+  "phases": [
+   {
+    "name": "anticipation",
+    "frames": [
+     6,
+     10
+    ],
+    "cartoon_frames": [
+     8,
+     12
+    ],
+    "ease": [
+     "ease_out_pow",
+     2
+    ],
+    "hip_y_H": -0.15,
+    "cartoon_hip_y_H": -0.25,
+    "torso_lean_deg": [
+     20,
+     35
+    ],
+    "arm_deg": [
+     -60,
+     -45
+    ]
+   },
+   {
+    "name": "crouch_hold",
+    "frames": [
+     0,
+     2
+    ],
+    "cartoon_frames": [
+     3,
+     6
+    ],
+    "drift": 0.015
+   },
+   {
+    "name": "takeoff",
+    "frames": [
+     2,
+     3
+    ],
+    "cartoon_frames": [
+     2,
+     2
+    ],
+    "ease": [
+     "ease_out_pow",
+     3
+    ],
+    "stretch_sy": 1.1,
+    "cartoon_stretch_sy": 1.25,
+    "arm_deg": [
+     120,
+     160
+    ],
+    "exposure": 1
+   },
+   {
+    "name": "rise",
+    "frames": "N_up",
+    "ballistic": true,
+    "stretch_to_1_at": "apex"
+   },
+   {
+    "name": "apex",
+    "frames": [
+     1,
+     2
+    ],
+    "cartoon_frames": [
+     2,
+     4
+    ],
+    "knee_tuck_H": [
+     0.15,
+     0.25
+    ]
+   },
+   {
+    "name": "fall",
+    "frames": "N_up",
+    "ballistic": true,
+    "pre_land_stretch_sy": [
+     1.05,
+     1.15
+    ]
+   },
+   {
+    "name": "land",
+    "frames": [
+     1,
+     2
+    ],
+    "squash_sy": 0.9,
+    "cartoon_squash_sy": 0.78,
+    "hip_drop_H": [
+     -0.12,
+     -0.2
+    ],
+    "decel_frames": [
+     2,
+     3
+    ],
+    "arm_delay_frames": 2,
+    "exposure": 1
+   },
+   {
+    "name": "recover",
+    "frames": [
+     6,
+     12
+    ],
+    "cartoon_frames": [
+     8,
+     16
+    ],
+    "ease": "cos_ease",
+    "overshoot_H": 0.015
+   }
+  ],
+  "N_up_formula": "14.1*sqrt(h_over_H)",
+  "examples": {
+   "0.10": 4.5,
+   "0.30": 7.7,
+   "1.00": 14.1
+  }
+ },
+ "take": {
+  "single": [
+   {
+    "name": "neutral",
+    "frames": [
+     6,
+     12
+    ],
+    "body_sy": 1.0
+   },
+   {
+    "name": "anticipation",
+    "frames": [
+     4,
+     8
+    ],
+    "ease": "slow_in",
+    "body_sy": 0.85,
+    "feature_body_sy": 0.93,
+    "head_sy": 0.85,
+    "head_dy_H": -0.06,
+    "eyes": "squeezed"
+   },
+   {
+    "name": "extreme",
+    "frames": [
+     2,
+     4
+    ],
+    "exposure": 1,
+    "body_sy": 1.4,
+    "feature_body_sy": 1.12,
+    "head_dy_H": 0.1,
+    "eye_scale": [
+     1.3,
+     1.6
+    ],
+    "inbetween": "none_or_smear"
+   },
+   {
+    "name": "overshoot_hold",
+    "frames": [
+     6,
+     12
+    ],
+    "vibrate": {
+     "drawings": 2,
+     "exposure": 1,
+     "scale_jitter": 0.015,
+     "px_jitter": 2
+    }
+   },
+   {
+    "name": "settle",
+    "frames": [
+     6,
+     12
+    ],
+    "ease": "slow_in",
+    "body_sy": 1.04,
+    "spring_zeta": 0.5
+   },
+   {
+    "name": "final_hold",
+    "frames": [
+     8,
+     24
+    ],
+    "moving_hold_drift": 0.02
+   }
+  ],
+  "double": [
+   {
+    "name": "glance",
+    "frames": [
+     8,
+     12
+    ],
+    "head_turn_frames": [
+     6,
+     8
+    ]
+   },
+   {
+    "name": "oblivious",
+    "frames": [
+     12,
+     24
+    ]
+   },
+   {
+    "name": "freeze",
+    "frames": [
+     4,
+     8
+    ]
+   },
+   {
+    "name": "snap_back",
+    "frames": [
+     2,
+     4
+    ],
+    "exposure": 1,
+    "smear": true
+   },
+   {
+    "name": "take",
+    "ref": "take.single[1:]"
+   }
+  ]
+ },
+ "head_turn": {
+  "frames": 8,
+  "range": [
+   6,
+   12
+  ],
+  "yaw_ease": "cos_ease",
+  "yaw_fraction_per_frame": [
+   0,
+   0.038,
+   0.146,
+   0.309,
+   0.5,
+   0.691,
+   0.854,
+   0.962,
+   1
+  ],
+  "dip_Hh": 0.04,
+  "dip_formula": "-dip*sin(pi*f/N)",
+  "dip_per_frame_Hh": [
+   0,
+   -0.015,
+   -0.028,
+   -0.037,
+   -0.04,
+   -0.037,
+   -0.028,
+   -0.015,
+   0
+  ],
+  "eye_target_fraction_per_frame": [
+   0,
+   0.4,
+   0.85,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "lids_per_frame": [
+   "O",
+   "H",
+   "C",
+   "C",
+   "H",
+   "O",
+   "O",
+   "O",
+   "O"
+  ],
+  "anime_3_drawing": [
+   "front",
+   "three_quarter_dipped_eyes_closed",
+   "profile"
+  ]
+ },
+ "eye_dart": {
+  "saccade_ms": "37+2.7*deg",
+  "inbetweens": [
+   0,
+   1
+  ],
+  "inbetween_position": 0.75,
+  "hold_frames_min": 6,
+  "hold_frames_typ": [
+   12,
+   36
+  ],
+  "lid_follow_down": 0.3
+ },
+ "blink": {
+  "physiological": [
+   "H",
+   "C",
+   "C",
+   "Q",
+   "H",
+   "H",
+   "O"
+  ],
+  "standard": [
+   "H",
+   "C",
+   "C",
+   "H"
+  ],
+  "quick": [
+   "H",
+   "C",
+   "H"
+  ],
+  "anime_twos": [
+   "H",
+   "H",
+   "C",
+   "C",
+   "H",
+   "H"
+  ],
+  "sleepy": [
+   "H",
+   "H",
+   "Q",
+   "Q",
+   "C",
+   "C",
+   "C",
+   "C",
+   "C",
+   "C",
+   "Q",
+   "Q",
+   "H",
+   "H"
+  ],
+  "double": [
+   "H",
+   "C",
+   "H",
+   "O",
+   "O",
+   "H",
+   "C",
+   "H"
+  ],
+  "lid_openness": {
+   "O": 1.0,
+   "H": 0.5,
+   "Q": 0.25,
+   "C": 0.0
+  },
+  "interval_s": [
+   2,
+   5
+  ],
+  "force_on": [
+   "thought_change",
+   "head_turn_ge_8f",
+   "eye_target_change"
+  ]
+ },
+ "ma": {
+  "breath_frames": [
+   12,
+   24
+  ],
+  "reflective_frames": [
+   36,
+   96
+  ],
+  "pillow_shot_frames": [
+   96,
+   192
+  ],
+  "place": [
+   "after_peak",
+   "scene_open",
+   "between_lines"
+  ],
+  "character_drift_max": 0.02,
+  "env_motion_hz": [
+   0.3,
+   0.8
+  ],
+  "max_blinks": 1,
+  "budget_calm": [
+   0.05,
+   0.1
+  ]
+ },
+ "overlap": {
+  "model": "theta'' + 2*zeta*wn*theta' + wn**2*(theta - target) = -kappa*a_parent_perp/L",
+  "wn": "2*pi*fn",
+  "overshoot": "exp(-zeta*pi/sqrt(1-zeta**2))",
+  "settle_frames": "24*4/(zeta*wn)",
+  "integrator": {
+   "method": "semi_implicit_euler",
+   "substeps": 4
+  },
+  "chain_shortcut": "theta_i(f) = gain**i * theta_root(f - i*delay)",
+  "fade_after_oscillations": 2,
+  "presets": {
+   "short_hair": {
+    "fn": 2.5,
+    "zeta": 0.45,
+    "delay": 1,
+    "gain": 1.0,
+    "segments": 3
+   },
+   "long_hair": {
+    "fn": 1.2,
+    "zeta": 0.35,
+    "delay": 2,
+    "gain": 1.15,
+    "segments": 5
+   },
+   "tail": {
+    "fn": 1.5,
+    "zeta": 0.25,
+    "delay": 2,
+    "gain": 1.25,
+    "segments": 6
+   },
+   "cape": {
+    "fn": 1.0,
+    "zeta": 0.4,
+    "delay": 2,
+    "gain": 1.1,
+    "segments": 4
+   },
+   "ears": {
+    "fn": 3.0,
+    "zeta": 0.3,
+    "delay": 1,
+    "gain": 1.2,
+    "segments": 2
+   },
+   "jiggle": {
+    "fn": 4.0,
+    "zeta": 0.5,
+    "delay": 1,
+    "gain": 1.0,
+    "segments": 1,
+    "amp_H": [
+     0.01,
+     0.02
+    ]
+   },
+   "antenna": {
+    "fn": 4.0,
+    "zeta": 0.15,
+    "delay": 1,
+    "gain": 1.3,
+    "segments": 3
+   },
+   "wind_idle": {
+    "fn": [
+     0.3,
+     0.8
+    ],
+    "delay": 3,
+    "gain": 1.2,
+    "amp_deg": [
+     3,
+     8
+    ],
+    "mode": "sum_of_sines_plus_noise"
+   }
+  }
+ },
+ "lip_sync": {
+  "lead_frames": 2,
+  "min_hold": 2,
+  "mbp_min_closed": 1,
+  "rest_after_silence_frames": 6,
+  "jaw_lead_frames": 1,
+  "accent_vowel_scale": 1.2,
+  "blair_shapes": [
+   "AI",
+   "E",
+   "O",
+   "U",
+   "etc",
+   "L",
+   "WQ",
+   "MBP",
+   "FV",
+   "rest"
+  ],
+  "arpabet_to_blair": {
+   "AA": "AI",
+   "AE": "AI",
+   "AH": "AI",
+   "AW": "AI",
+   "AY": "AI",
+   "IH": "AI",
+   "EH": "E",
+   "ER": "E",
+   "EY": "E",
+   "IY": "E",
+   "AO": "O",
+   "OW": "O",
+   "OY": "O",
+   "UH": "U",
+   "UW": "U",
+   "W": "WQ",
+   "M": "MBP",
+   "B": "MBP",
+   "P": "MBP",
+   "F": "FV",
+   "V": "FV",
+   "L": "L",
+   "CH": "etc",
+   "D": "etc",
+   "DH": "etc",
+   "G": "etc",
+   "HH": "etc",
+   "JH": "etc",
+   "K": "etc",
+   "N": "etc",
+   "NG": "etc",
+   "R": "etc",
+   "S": "etc",
+   "SH": "etc",
+   "T": "etc",
+   "TH": "etc",
+   "Y": "etc",
+   "Z": "etc",
+   "ZH": "etc",
+   "sil": "rest"
+  },
+  "arpabet_map_confidence": "UNCERTAIN",
+  "anime_3shape": {
+   "shapes": [
+    "closed",
+    "half",
+    "open"
+   ],
+   "vowel_map": {
+    "a": "open",
+    "o": "open",
+    "i": "half",
+    "u": "half",
+    "e": "half",
+    "n": "closed",
+    "m": "closed",
+    "b": "closed",
+    "p": "closed"
+   },
+   "loop_24fps": [
+    [
+     "open",
+     3
+    ],
+    [
+     "half",
+     3
+    ],
+    [
+     "open",
+     3
+    ],
+    [
+     "closed",
+     3
+    ]
+   ],
+   "loop_fast_24fps": [
+    [
+     "open",
+     2
+    ],
+    [
+     "half",
+     2
+    ],
+    [
+     "closed",
+     2
+    ]
+   ],
+   "source_loop_15fps": [
+    [
+     "open",
+     3
+    ],
+    [
+     "half",
+     3
+    ],
+    [
+     "open",
+     2
+    ],
+    [
+     "closed",
+     2
+    ]
+   ],
+   "phrase_start": [
+    "closed",
+    "half"
+   ],
+   "phrase_end": [
+    "half",
+    "closed"
+   ],
+   "lead_frames": [
+    1,
+    2
+   ]
+  }
+ },
+ "anime_fx": {
+  "smear": {
+   "frames": 1,
+   "exposure": 1,
+   "trigger_travel_over_size": 0.5,
+   "tail_width": [
+    0.3,
+    0.5
+   ]
+  },
+  "multiples": {
+   "frames": [
+    1,
+    2
+   ],
+   "copies": [
+    2,
+    5
+   ]
+  },
+  "impact": {
+   "frames": [
+    1,
+    4
+   ],
+   "exposure": 1,
+   "pattern": [
+    "white_silhouette",
+    "black_silhouette",
+    "inverted",
+    "normal"
+   ],
+   "max_flashes_per_s": 3
+  },
+  "speed_lines": {
+   "count": [
+    8,
+    20
+   ],
+   "len_frame_w": [
+    0.3,
+    1.0
+   ],
+   "width_px": [
+    1,
+    4
+   ],
+   "redraw_every": [
+    1,
+    2
+   ],
+   "cycle_drawings": [
+    2,
+    3
+   ]
+  },
+  "focus_lines": {
+   "count": [
+    40,
+    120
+   ],
+   "inner_radius_frame_h": [
+    0.25,
+    0.4
+   ],
+   "cycle_drawings": [
+    2,
+    3
+   ]
+  },
+  "itano": {
+   "missiles": [
+    6,
+    30
+   ],
+   "helix_radius_frame_w": [
+    0.02,
+    0.05
+   ],
+   "turns_per_24f": [
+    1,
+    2
+   ],
+   "puff_growth_per_frame": [
+    0.03,
+    0.08
+   ],
+   "trail_life_frames": [
+    12,
+    24
+   ],
+   "near_scale": [
+    2,
+    4
+   ]
+  },
+  "kanada": {
+   "pre_action_hold_frames": 6,
+   "exposure_mix": [
+    [
+     1,
+     3
+    ],
+    [
+     2,
+     4
+    ]
+   ],
+   "sudden_move_inbetweens": 0,
+   "muzzle_flash": {
+    "frames": 2,
+    "exposure": 1
+   },
+   "foreshorten_scale": [
+    1.5,
+    2.5
+   ]
+  },
+  "hair_highlight": {
+   "band_pos_from_crown": 0.33,
+   "segments": [
+    3,
+    7
+   ],
+   "value_up": [
+    0.15,
+    0.2
+   ]
+  },
+  "blush": {
+   "strokes": [
+    3,
+    5
+   ],
+   "angle_deg": 45,
+   "or_ellipse_face_w": 0.25
+  }
+ },
+ "camera": {
+  "parallax": {
+   "speed_ratio": "Z_ref/Z",
+   "depth_for_ratio": "Z_ref/r",
+   "screen_shift": "-F*dC/Z"
+  },
+  "multiplane_truck": {
+   "layer_scale": "Z/(Z-d)"
+  },
+  "exp_truck": {
+   "field_w": "W0*(W1/W0)**p(t)",
+   "per_frame_ratio_linear": "(W1/W0)**(1/N)",
+   "ease_frames_min": 8
+  },
+  "follow_pan": {
+   "bg_speed": "step_len_px/frames_per_step",
+   "foot_slide_px": 0
+  },
+  "repeat_bg": {
+   "length": "k*v*cycle_frames",
+   "min_length": "max(2*W_cam, W_cam + v*frames_per_step)",
+   "per_layer_speed": "r_i*v"
+  },
+  "rack_focus": {
+   "blur_px": "B*abs(1-Z_f/Z)",
+   "B_px_1080": [
+    6,
+    10
+   ],
+   "frames": [
+    8,
+    16
+   ],
+   "interp_space": "inverse_depth",
+   "ease": "cos_ease",
+   "far_bg_cap_px": 1.5
+  }
+ },
+ "spacing": {
+  "halving": {
+   "3": [
+    0.25,
+    0.5,
+    0.75
+   ],
+   "5": [
+    0.125,
+    0.25,
+    0.5,
+    0.75,
+    0.875
+   ],
+   "7": [
+    0.0625,
+    0.125,
+    0.25,
+    0.5,
+    0.75,
+    0.875,
+    0.9375
+   ],
+   "9": [
+    0.03125,
+    0.0625,
+    0.125,
+    0.25,
+    0.5,
+    0.75,
+    0.875,
+    0.9375,
+    0.96875
+   ],
+   "slow_in_5": [
+    0.5,
+    0.75,
+    0.875,
+    0.9375,
+    0.96875
+   ],
+   "slow_out_5": [
+    0.03125,
+    0.0625,
+    0.125,
+    0.25,
+    0.5
+   ]
+  },
+  "formulas": {
+   "t": "i/(n+1)",
+   "linear": "t",
+   "sine": "0.5-0.5*cos(pi*t)",
+   "smoothstep": "t*t*(3-2*t)",
+   "quad_io": "2*t*t if t<0.5 else 1-2*(1-t)**2",
+   "cubic_io": "4*t**3 if t<0.5 else 1-4*(1-t)**3",
+   "slow_out_quad": "t*t",
+   "slow_in_quad": "1-(1-t)**2",
+   "sigmoid_a": "t**a/(t**a+(1-t)**a)",
+   "halving_slow_in": "1-2**-i"
+  },
+  "tables": {
+   "sine": {
+    "5": [
+     0.067,
+     0.25,
+     0.5,
+     0.75,
+     0.933
+    ],
+    "7": [
+     0.038,
+     0.146,
+     0.309,
+     0.5,
+     0.691,
+     0.854,
+     0.962
+    ],
+    "9": [
+     0.024,
+     0.095,
+     0.206,
+     0.345,
+     0.5,
+     0.655,
+     0.794,
+     0.905,
+     0.976
+    ]
+   },
+   "smoothstep": {
+    "5": [
+     0.074,
+     0.259,
+     0.5,
+     0.741,
+     0.926
+    ],
+    "7": [
+     0.043,
+     0.156,
+     0.316,
+     0.5,
+     0.684,
+     0.844,
+     0.957
+    ],
+    "9": [
+     0.028,
+     0.104,
+     0.216,
+     0.352,
+     0.5,
+     0.648,
+     0.784,
+     0.896,
+     0.972
+    ]
+   },
+   "quad_io": {
+    "5": [
+     0.056,
+     0.222,
+     0.5,
+     0.778,
+     0.944
+    ],
+    "7": [
+     0.031,
+     0.125,
+     0.281,
+     0.5,
+     0.719,
+     0.875,
+     0.969
+    ],
+    "9": [
+     0.02,
+     0.08,
+     0.18,
+     0.32,
+     0.5,
+     0.68,
+     0.82,
+     0.92,
+     0.98
+    ]
+   },
+   "cubic_io": {
+    "5": [
+     0.019,
+     0.148,
+     0.5,
+     0.852,
+     0.981
+    ],
+    "7": [
+     0.008,
+     0.062,
+     0.211,
+     0.5,
+     0.789,
+     0.938,
+     0.992
+    ],
+    "9": [
+     0.004,
+     0.032,
+     0.108,
+     0.256,
+     0.5,
+     0.744,
+     0.892,
+     0.968,
+     0.996
+    ]
+   },
+   "slow_out_quad": {
+    "5": [
+     0.028,
+     0.111,
+     0.25,
+     0.444,
+     0.694
+    ],
+    "7": [
+     0.016,
+     0.062,
+     0.141,
+     0.25,
+     0.391,
+     0.562,
+     0.766
+    ],
+    "9": [
+     0.01,
+     0.04,
+     0.09,
+     0.16,
+     0.25,
+     0.36,
+     0.49,
+     0.64,
+     0.81
+    ]
+   },
+   "slow_in_quad": {
+    "5": [
+     0.306,
+     0.556,
+     0.75,
+     0.889,
+     0.972
+    ],
+    "7": [
+     0.234,
+     0.438,
+     0.609,
+     0.75,
+     0.859,
+     0.938,
+     0.984
+    ],
+    "9": [
+     0.19,
+     0.36,
+     0.51,
+     0.64,
+     0.75,
+     0.84,
+     0.91,
+     0.96,
+     0.99
+    ]
+   }
+  },
+  "favoured_breakdown": {
+   "time": 0.5,
+   "position": [
+    0.333,
+    0.667
+   ]
+  }
+ },
+ "proportions": {
+  "chibi": {
+   "heads": [
+    2,
+    3
+   ],
+   "eye_line_Hh": [
+    0.6,
+    0.65
+   ],
+   "eye_h_Hh": [
+    0.25,
+    0.35
+   ],
+   "eye_w_face": [
+    0.25,
+    0.3
+   ],
+   "crotch_H": [
+    0.4,
+    0.45
+   ]
+  },
+  "classic_cartoon": {
+   "heads": [
+    2.5,
+    3.5
+   ],
+   "eye_line_Hh": [
+    0.45,
+    0.55
+   ],
+   "eye_h_Hh": [
+    0.2,
+    0.3
+   ]
+  },
+  "child": {
+   "heads": [
+    4,
+    5
+   ],
+   "eye_line_Hh": [
+    0.55,
+    0.6
+   ],
+   "eye_h_Hh": [
+    0.18,
+    0.22
+   ],
+   "eye_w_face": [
+    0.22,
+    0.25
+   ]
+  },
+  "teen_anime": {
+   "heads": [
+    6,
+    7
+   ],
+   "eye_line_Hh": [
+    0.52,
+    0.56
+   ],
+   "eye_h_Hh": [
+    0.15,
+    0.2
+   ],
+   "eye_w_face": [
+    0.2,
+    0.24
+   ]
+  },
+  "adult_anime": {
+   "heads": [
+    7,
+    8
+   ],
+   "eye_line_Hh": [
+    0.5,
+    0.54
+   ],
+   "eye_h_Hh": [
+    0.1,
+    0.14
+   ],
+   "eye_w_face": [
+    0.18,
+    0.2
+   ],
+   "crotch_H": 0.5
+  },
+  "disney_human": {
+   "heads": [
+    6.5,
+    7.5
+   ],
+   "eye_line_Hh": [
+    0.5,
+    0.53
+   ],
+   "eye_h_Hh": [
+    0.08,
+    0.12
+   ]
+  },
+  "realistic": {
+   "heads": [
+    7,
+    7.5
+   ],
+   "eye_line_Hh": 0.5,
+   "eye_h_Hh": 0.06,
+   "eye_w_face": 0.2,
+   "crotch_H": 0.5
+  },
+  "heroic": {
+   "heads": [
+    8,
+    9
+   ],
+   "eye_line_Hh": 0.5,
+   "eye_w_face": 0.2
+  },
+  "common": {
+   "shoulder_w_Hh_male": 2.0,
+   "shoulder_w_Hh_female": [
+    1.5,
+    1.7
+   ],
+   "hand_len_Hh": 0.75,
+   "eye_spacing_eye_w": 1.0,
+   "mouth_line_Hh": [
+    0.75,
+    0.85
+   ],
+   "tolerance": 0.08
+  }
+ }
+}

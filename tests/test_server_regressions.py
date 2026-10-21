@@ -208,3 +208,21 @@ def test_two_processes_do_not_corrupt_a_scene(tmp_path):
     assert {k for k in st["layers"]["b"]["drawings"]} == {str(i) for i in range(1, 7)}
     d = SceneDoc.load(S._scene_file(sc))
     assert d.verify() == [] or all("file missing" in p for p in d.verify())
+
+
+def test_physics_tools_bake_exact_curves():
+    from otmcp import curve, physics
+    sc = fresh("qa_r_phys", frames=72)
+    S.add_layer(sc, "ball"); S.draw(sc, "ball", 1, CIRCLE)
+    S.set_pivot(sc, "ball", "auto", anchor="bottom")
+    res = S.physics_bounce(sc, "ball", 1, 400, fall_frames=12, material="basketball", bounces=2)
+    d = SceneDoc.load(S._scene_file(sc))
+    keys = d.get_params("Col1")["y"]["keys"]
+    samples = physics.bounce(400, 12, 0.76, 2)
+    for smp in samples:  # OpenToonz-evaluated curve reproduces the physics within 0.25 px
+        got = -curve.value_at(keys, smp["frame"]) * d.dpi()
+        assert abs(got - smp["h"]) <= 0.26
+    sy = d.get_params("Col1")["sy"]["keys"]
+    sx = d.get_params("Col1")["sx"]["keys"]
+    for f in range(0, len(samples)):
+        assert abs(curve.value_at(sy, f) * curve.value_at(sx, f) - 1) < 0.02  # area preserved
