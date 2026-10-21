@@ -4,7 +4,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from otmcp import draw, style, tnz, tnztree as T, vec
+from otmcp import curve, draw, style, tnz, vec
+from otmcp import tnztree as T
 from otmcp.scene import Cell, SceneDoc
 
 
@@ -158,7 +159,6 @@ def test_shadow_color_darker():
 
 
 # ------------------------------------------------------------------ exact interpolation (curve.py)
-from otmcp import curve
 
 
 def test_ease_in_written_negative():

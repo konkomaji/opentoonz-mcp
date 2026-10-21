@@ -14,7 +14,9 @@ import os
 import re
 from pathlib import Path
 
-WORK = Path(os.environ.get("OTMCP_WORK", r"D:\otmcp\work"))
+from . import config
+
+WORK = config.work_dir()
 LESSONS = WORK / "knowledge" / "lessons.json"
 STYLE_OVERRIDES = WORK / "knowledge" / "styles_custom.json"
 

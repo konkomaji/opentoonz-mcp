@@ -157,7 +157,7 @@ def transform_shape(sh: dict, m) -> dict:
         out["transform"] = f"{mat} {prev}" if prev else mat
         return out
     if t in ("circle", "ellipse", "rect"):
-        from .vec import shape_contours, catmull
+        from .vec import catmull, shape_contours
         cs = shape_contours(sh)
         dparts = []
         for cnt in cs:

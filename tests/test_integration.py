@@ -1,6 +1,4 @@
 """Integration tests against the real OpenToonz install (slow). Run: python -m pytest -q -m slow"""
-import json
-import shutil
 
 import pytest
 
@@ -35,7 +33,7 @@ def scene():
 
 
 def test_compile_and_pli(scene):
-    res = S.compile_vectors(scene)
+    S.compile_vectors(scene)
     st = S._load_state(scene)
     _, strokes = pli.read(str(S._pli_file(st, "ball")))
     assert strokes and {s.frame for s in strokes} >= {1, 12}
@@ -78,7 +76,9 @@ def test_error_is_reported():
 def test_evaluator_matches_opentoonz_render(tmp_path):
     """Render a keyed dot through tcomposer and compare per-frame position with curve.value_at (<1.5 px)."""
     import subprocess
+
     from PIL import Image, ImageChops, ImageDraw
+
     from otmcp import curve, tnz
     im = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
     ImageDraw.Draw(im).ellipse([950, 530, 970, 550], fill=(255, 0, 0, 255))

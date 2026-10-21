@@ -6,3 +6,11 @@ __pycache__/
 
 # local research notes and session devlog (not published)
 research/
+
+# build / packaging
+dist/
+build/
+*.egg-info/
+
+# machine-specific MCP client config (see README for examples)
+.mcp.json

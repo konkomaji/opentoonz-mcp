@@ -34,17 +34,22 @@ Facts the MCP depends on. Every item was checked in two ways: against the OpenTo
 ## Stage objects — `toonzlib/tstageobject.cpp`, `tstageobjecttree.cpp`
 - Ids: `Table`, `CameraN`, `PegN`, `ColN` (Col1 = column index 0). The active camera carries `activeboth="yes"`.
 - Units: X/Y are inches with +y up (pixels = inches · dpi). Rotation is degrees CCW. Scale 1.0 = 100%.
-- **Pivot:** placement = `T(offset+pos)·R·Sh·S·T(−center)`. The file stores `center cx cy −offx −offy`. To move the pivot without moving the object, set offset = center, i.e. write `cx cy −cx −cy`.
+- **Pivot:** placement = `T(offset+pos)·R·Sh·S·T(−center)`. The file stores `center cx cy −offx −offy`. Moving the center by d keeps the object still only if the offset also moves by d. A fresh object (center = offset = 0) therefore gets `cx cy −cx −cy`. An object whose center was moved in the GUI keeps its existing center−offset difference.
 - Keyframes (`common/tparam/tdoublekeyframe.cpp`):
   - Format: `<keyframes><L> frame value </L> …`. Frames are 0-based.
   - Type codes: `L` linear, `C` constant, `Exp`, `S` speed (`frame value outX outY`), `E` ease in frames / `Ep` ease in percent (`frame value easeOut`), `Ex` expression.
+  - **The arrival ease is stored NEGATIVE.** OpenToonz reads it as `e1 = max(−speedIn.x, 0)` (`getEaseInOutValue`), so a positive value silently disables the slow-in. Verified by rendering.
   - The interpolation of a segment comes from its **first** key.
   - `<prev>` holds the incoming handle and is optional on load.
 - Camera: a camera scale below 1 zooms **in**.
 
+## Cameras
+- `properties/cameras/camera[i]` feeds stage object `Camera{i+1}`. Pixel/inch conversions must use the **active** camera, the one marked `activeboth`/`active`.
+
 ## Headless operation
 - `tcomposer.exe scene.tnz -o out.png -range a b` renders frames a..b. The range is 1-based and inclusive. The output is a numbered sequence `out.0001.png` that keeps the scene's frame numbers.
-- `OpenToonz.exe file.toonzscript` runs a QtScript and exits without showing a window. It takes about 1.5 s.
+- `OpenToonz.exe file.toonzscript` runs a QtScript and exits without showing a window. It takes about 1.5 s and always exits with code 1, so check the output files rather than the exit code.
+- Vectorizers: `new OutlineVectorizer()` / `new CenterlineVectorizer()`, then `vectorize(level)` returns a vector level with a shared palette. Outline needs `preservePaintedAreas = true` to keep fills.
   - API: `new Level()`, `l.load(path)`, `l.save(path)`, `Image`, `Scene`, `OutlineVectorizer`, `CenterlineVectorizer`, `Rasterizer`.
   - The script API has no access to keyframes.
 

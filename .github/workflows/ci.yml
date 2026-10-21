@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: python -m ruff check otmcp tests scripts
+      - name: Unit tests
+        # OpenToonz is not installed on hosted runners; render tests are marked "slow" and run locally.
+        run: python -m pytest -m "not slow" -q
+      - name: Tool reference is up to date
+        run: python scripts/gen_tool_docs.py --check
+
+  package:
+    name: Build package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Versions and changelog agree
+        run: python scripts/release_check.py
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  changelog:
+    name: Changelog updated
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-changelog')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Code changes need a CHANGELOG entry
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-only "$base" HEAD)
+          if echo "$changed" | grep -qE '^(otmcp/|pyproject.toml|server.json)'; then
+            if ! echo "$changed" | grep -qx 'CHANGELOG.md'; then
+              echo "::error::Code changed but CHANGELOG.md was not updated. Add a line under '## [Unreleased]' (or label the PR skip-changelog)."
+              exit 1
+            fi
+          fi

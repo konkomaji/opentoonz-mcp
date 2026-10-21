@@ -1,0 +1,15 @@
+name: Feature request
+description: An animation technique, tool or OpenToonz feature you want the assistant to handle
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What do you want to animate or automate?
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How would an animator do it by hand in OpenToonz?
+      description: Menus, fx, xsheet setup, timing. This helps map the request onto real OpenToonz data.

@@ -1,0 +1,23 @@
+OpenToonz MCP
+Copyright (c) 2026 konkomaji (https://konkomaji.com/)
+Licensed under the MIT License (see LICENSE).
+
+This project works with OpenToonz but contains no OpenToonz source code or binaries.
+
+OpenToonz
+  https://github.com/opentoonz/opentoonz
+  Copyright (c) 2016, DWANGO Co., Ltd. and the OpenToonz contributors.
+  Released under the BSD 3-Clause License.
+
+  OpenToonz is the open-source release of "Toonz", developed by Digital Video S.p.A.
+  in Italy and customised by Studio Ghibli, which used it on its films for many years.
+  "OpenToonz" and "Toonz" are names of their respective owners; this project is not
+  affiliated with or endorsed by DWANGO, Digital Video, or Studio Ghibli.
+
+  This server reads and writes OpenToonz's documented-by-source file formats (.tnz scenes,
+  .pli vector levels) and drives the installed OpenToonz.exe and tcomposer.exe. The format
+  knowledge was derived by reading the OpenToonz v1.8.0 source code and was checked
+  against OpenToonz's own renderer.
+
+Third-party Python packages used at runtime (installed separately, under their own licenses):
+  mcp (MIT), Pillow (MIT-CMU), Shapely (BSD-3-Clause), fontTools (MIT), svgelements (MIT).

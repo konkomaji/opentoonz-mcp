@@ -7,9 +7,9 @@ import re
 import uuid
 from pathlib import Path
 
-from . import art
+from . import art, config
 
-WORK = Path(os.environ.get("OTMCP_WORK", r"D:\otmcp\work"))
+WORK = config.work_dir()
 PARTS_DIR = WORK / "knowledge" / "parts"
 
 
@@ -79,7 +79,8 @@ def svg_file_to_shapes(path: str, box: tuple[float, float, float, float] | None 
                        canvas: tuple[int, int] = (1920, 1080), human: bool = False) -> list[dict]:
     """Convert every visible shape of an SVG file into svgpath shape dicts (canvas px).
     box=(x, y, w, h): fit the artwork inside it keeping proportions (default: the whole canvas)."""
-    from svgelements import SVG, Path as SPath, Shape, Text
+    from svgelements import SVG, Shape, Text
+    from svgelements import Path as SPath
 
     svg = SVG.parse(path, reify=True)
     items = []
