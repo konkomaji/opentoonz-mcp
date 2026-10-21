@@ -220,7 +220,7 @@ def test_physics_tools_bake_exact_curves():
     keys = d.get_params("Col1")["y"]["keys"]
     samples = physics.bounce(400, 12, 0.76, 2)
     for smp in samples:  # OpenToonz-evaluated curve reproduces the physics within 0.25 px
-        got = -curve.value_at(keys, smp["frame"]) * d.dpi()
+        got = curve.value_at(keys, smp["frame"]) * d.dpi()  # internal y is +up inches = height above ground
         assert abs(got - smp["h"]) <= 0.26
     sy = d.get_params("Col1")["sy"]["keys"]
     sx = d.get_params("Col1")["sx"]["keys"]
