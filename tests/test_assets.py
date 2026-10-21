@@ -3,7 +3,6 @@ import pytest
 
 from otmcp import assets, learn, pli
 from otmcp import server as S
-from otmcp.scene import SceneDoc
 
 pytestmark = pytest.mark.slow
 SVG = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120"><g transform="translate(10,10)">

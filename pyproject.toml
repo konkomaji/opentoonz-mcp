@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opentoonz-mcp"
+version = "0.1.0"
+description = "MCP server that lets AI assistants animate in OpenToonz: real vector levels, xsheet timing, keyframes, physics and studio-style line work."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "konkomaji", email = "konkomaji@gmail.com" }]
+keywords = ["mcp", "model-context-protocol", "opentoonz", "animation", "2d-animation", "claude", "ai"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Multimedia :: Video",
+]
+dependencies = [
+  "mcp[cli]>=1.20,<2",
+  "pillow>=10",
+  "shapely>=2.0",
+  "fonttools>=4.40",
+  "svgelements>=1.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "build>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/konkomaji/opentoonz-mcp"
+Repository = "https://github.com/konkomaji/opentoonz-mcp"
+Issues = "https://github.com/konkomaji/opentoonz-mcp/issues"
+Changelog = "https://github.com/konkomaji/opentoonz-mcp/blob/main/CHANGELOG.md"
+Author = "https://konkomaji.com/"
+
+[project.scripts]
+opentoonz-mcp = "otmcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["otmcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["otmcp", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "server.json", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: needs a local OpenToonz install (renders through tcomposer)"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+ignore = ["E731", "B008", "E501", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E702", "E741"]

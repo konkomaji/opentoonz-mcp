@@ -1,0 +1,30 @@
+name: Bug report
+description: Something the server did wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The tool call (or your prompt), what you expected, and what you got. Paste the tool result, including any `warnings` or `verify` fields.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. create_scene ...\n2. add_layer ...\n3. render ..."
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of the `opentoonz_info` tool (OpenToonz and opentoonz-mcp versions), plus your OS and Python version.
+    validations:
+      required: true
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal excerpt (optional)
+      description: The last entries from `get_journal(scene)`. They show every action and every outside edit the server detected.

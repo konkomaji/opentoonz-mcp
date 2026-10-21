@@ -10,7 +10,8 @@ import hashlib
 import re
 from dataclasses import dataclass
 
-from . import tnz, tnztree as T
+from . import tnz
+from . import tnztree as T
 from .tnztree import Node, unquote
 
 INTERP_CODE = {"linear": "L", "constant": "C", "ease": "Ep", "speed": "S", "exp": "Exp", "ease_frames": "E"}

@@ -82,7 +82,7 @@ def _resample(poly, closed, spacing):
     if total == 0:
         return list(poly)
     n = min(2000, max(4 if closed else 2, round(total / spacing)))
-    out, d, i, acc = [], 0.0, 0, 0.0
+    out, _d, i, acc = [], 0.0, 0, 0.0
     step = total / (n if closed else n - 1)
     for k in range(n):
         target = k * step
@@ -458,7 +458,7 @@ def to_png(els: list[Element], width: int, height: int, ss: int = 2) -> Image.Im
         if e.fill:
             from PIL import ImageChops
             mask = Image.new("L", big.size, 0)
-            md = ImageDraw.Draw(mask)
+            ImageDraw.Draw(mask)
             for c in e.contours:  # even-odd so glyph holes stay open
                 if len(c.pts) < 3:
                     continue

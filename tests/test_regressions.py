@@ -1,15 +1,11 @@
 """Regression tests for every confirmed QA finding (format, vector, server reviews, 2026-10-22)."""
 import math
-import random
-import shutil
-import subprocess
-import sys
-import textwrap
 
 import pytest
 
-from otmcp import art, draw, pli, style, tnz, tnztree as T, vec
-from otmcp.scene import Cell, SceneDoc
+from otmcp import art, draw, pli, style, tnz, vec
+from otmcp import tnztree as T
+from otmcp.scene import SceneDoc
 
 
 def doc1():

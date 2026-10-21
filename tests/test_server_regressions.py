@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from otmcp import learn, pli
+from otmcp import learn
 from otmcp import server as S
 from otmcp import tnztree as T
 from otmcp.scene import SceneDoc
@@ -215,7 +215,7 @@ def test_physics_tools_bake_exact_curves():
     sc = fresh("qa_r_phys", frames=72)
     S.add_layer(sc, "ball"); S.draw(sc, "ball", 1, CIRCLE)
     S.set_pivot(sc, "ball", "auto", anchor="bottom")
-    res = S.physics_bounce(sc, "ball", 1, 400, fall_frames=12, material="basketball", bounces=2)
+    S.physics_bounce(sc, "ball", 1, 400, fall_frames=12, material="basketball", bounces=2)
     d = SceneDoc.load(S._scene_file(sc))
     keys = d.get_params("Col1")["y"]["keys"]
     samples = physics.bounce(400, 12, 0.76, 2)

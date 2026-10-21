@@ -1,79 +1,86 @@
 # Architecture (developer guide)
 
+This is how I structured the server, and the rules I follow when I change it. The guiding idea: the assistant may only ever touch an OpenToonz scene through a transaction it can undo, and everything it writes must be something OpenToonz itself would write.
+
 ```
-Claude ──MCP stdio──► otmcp.server (FastMCP, 34 tools)
-                         │
-         ┌───────────────┼──────────────────────┬───────────────────┐
-         ▼               ▼                      ▼                   ▼
-   scene.SceneDoc    vec / draw / style      pli                  learn
-   (tnztree: lossless (shapes → contours →   (read + pressure     (lessons, prefs,
-    .tnz edit)        humanize → SVG/PNG)     patch .pli)          style overrides)
-         │               │                      ▲
-         ▼               ▼                      │
-  sandbox/scenes/   work/svg/<scene>/<layer>/ ──► OpenToonz.exe *.toonzscript ──► sandbox/drawings/<scene>/<layer>.pli
-     <name>.tnz                                                        │
-         └──────────────────────────────► tcomposer.exe ──► work/renders ──► ffmpeg (mp4/gif)
+MCP client ──stdio──► otmcp.server (FastMCP, 44 tools)
+                          │  every scene-changing call: lock → snapshot → edit → verify → write → journal
+          ┌───────────────┼──────────────────┬──────────────────┬──────────────┐
+          ▼               ▼                  ▼                  ▼              ▼
+   scene.SceneDoc     vec / draw / art     pli               physics        learn
+   tnztree (lossless  (shapes → contours   (read .pli,       (ballistics,   (lessons, prefs,
+   .tnz edit), curve  → humanize → SVG /   pressure patch)   springs,       style overrides)
+   (exact OpenToonz   PNG), assets (parts,                   camera, charts)
+   key evaluator)     SVG/image import)
+          │               │                  ▲
+          ▼               ▼                  │
+   <stuff>/sandbox/   <work>/svg/<scene>/<layer>/ ──► OpenToonz.exe *.toonzscript ──► <stuff>/sandbox/drawings/<scene>/<layer>.pli
+   scenes/<name>.tnz                                   (SVG load, or Outline/Centerline vectorizer for traced layers)
+          └────────────────────────────────► tcomposer.exe ──► <work>/renders ──► ffmpeg (mp4/gif)
 ```
 
 ## Modules
+
 | file | responsibility |
 |---|---|
-| `tnztree.py` | Tokenizer, parser and dumper for TOStream. Raw tokens are kept, so nodes we don't touch round-trip exactly. |
-| `scene.py` | `SceneDoc` edits a loaded tree: levels, columns, cells (run encoding), stage objects, keyframes, pivot, and the structural `verify()`. |
-| `tnz.py` | Builder for a fresh scene skeleton. Only `create_scene` uses it; all other edits go through `SceneDoc`. |
-| `draw.py` | Colours, easing (including the studio `slow_in_out` chart), `tween`, and `tween_motion` (arc, area-preserving squash). |
-| `vec.py` | Turns shapes into contours, applies the hand-drawn wobble (seeded per drawing), builds cel shadows (shapely), produces ink+paint elements, and writes SVG at vector scale or a PNG preview. |
-| `pli.py` | Minimal `.pli` reader. `pressure_patch` adds taper and pressure to the strokes. |
-| `style.py` | Studio presets and colour design helpers. `get()` merges in learned overrides. |
-| `learn.py` | Global lessons store (`work/knowledge`), automatic advice, and style tuning. |
-| `server.py` | The tools. The `Ctx` class is the transaction around each call. |
+| `config.py` | Finds the OpenToonz install, the stuff folder and the work folder. Precedence: environment variable, then the Windows registry, then the standard path. |
+| `tnztree.py` | TOStream tokenizer, parser and dumper. Raw tokens are kept, so untouched nodes round-trip exactly. Attribute escaping matches OpenToonz `escape()`. |
+| `scene.py` | `SceneDoc`: levels, columns, cells (run encoding), stage objects, keyframes, `upsert_keys` (node-level merge that keeps GUI key data), pivot (offset-preserving), active-camera dpi, `verify()`. |
+| `curve.py` | Exact port of OpenToonz `TDoubleParam::getValue`: L, C, Exp, E, Ep, S (Bézier with speed truncation), step and cycle. |
+| `tnz.py` | Skeleton builder used only by `create_scene`. |
+| `draw.py` | Colours, easing (studio `slow_in_out`), `tween`, and `tween_motion` (arc, exact area-preserving squash). |
+| `art.py` | SVG path sampling (svgelements), brush pressure profiles, and an affine shape transform that keeps primitive types when it can. |
+| `vec.py` | Turns shapes into contours, applies the humanize step and the cel shadow (shapely), builds ink+paint elements, and writes SVG at vector scale or a PNG preview. Also produces ink stroke profiles. |
+| `pli.py` | `.pli` reader (v5.7 and later). `pressure_patch` rewrites thickness bytes in place (periodic on loops, per-frame seeds, atomic write). |
+| `assets.py` | Parts library (global, with variants), SVG file to shapes, image placement. |
+| `physics.py` | Bounce, jump, second-order springs, SmoothDamp, trauma shake, RDP key thinning, blink and lip-sync charts. Reads `data/recipes.json`. |
+| `style.py` | Style presets plus learned overrides; colour design (kage, iro-tore, lighting); built-in rule summary. |
+| `learn.py` | Lessons store with advice, ranking and `tune_style`. |
+| `server.py` | The tools, plus `Ctx` (the per-call transaction), compile and render. |
 
-## Per-call transaction (`server.Ctx`)
-1. Load the MCP state JSON and the **current** `.tnz` from disk.
-2. Detect outside edits. A tnz hash change gives a warning. A changed cell signature switches the layer to manual timing. A changed pli hash sets `gui_edited`.
-3. The tool edits `SceneDoc` and the state.
-4. `commit()` runs the write:
-   - Snapshot the scene and state.
-   - Write to `*.tnz.tmp`.
-   - Re-parse the tmp file and run `verify()`. A fatal problem aborts the write.
-   - Atomically replace the scene file.
-   - Store the hashes and cell signatures.
-   - Write the journal entry.
-   - Turn warnings into lessons.
+## Per-call transaction
 
-## Layer ↔ column mapping
-A layer owns one level (`+drawings/<scene>/<layer>.pli` or `..png`). Its column is the one whose cells reference that level. If there is none, the stage-object name is used as a fallback. Columns that no MCP layer owns are reported as `foreign_columns`, and they can still be keyed through `ColN`.
+1. The `@tool` wrapper takes the per-scene lock: `msvcrt` byte-range on Windows, `flock` elsewhere.
+2. `Ctx.__init__` loads the state JSON and the **current** `.tnz`, and detects outside edits:
+   - tnz hash
+   - fid-only cell signatures (OpenToonz renumbers persist ids on save)
+   - `.pli` hashes
+3. If the call changes anything, `Ctx` takes a **full snapshot first**: scene, state, `svg/<scene>` and `drawings/<scene>`.
+4. The tool edits the document and the state. It may write SVG and PNG files.
+5. `commit()` writes the result safely:
+   - Serialize to a unique temp file.
+   - Re-parse it and run `verify()`. A fatal problem aborts the write.
+   - Replace the scene with `os.replace`.
+   - Update the hashes and signatures, journal the call, and turn warnings into lessons.
+6. On any exception the wrapper **restores the snapshot**, so a failed call leaves no trace. `undo` restores older snapshots the same way.
 
-## Vector pipeline
-1. `draw` writes one SVG per drawing (plus 2 boil variants with ids d+1000, d+2000) and marks the layer dirty.
-2. `_compile`, run before preview, render or open:
-   - Remove orphan SVGs.
-   - Run one `.toonzscript` per batch that loads `<layer>..svg` and saves `<layer>.pli`.
-   - Apply `pressure_patch`.
-   - Record the pli hash.
-3. If the user edited a pli in the GUI, its hash changes. Compile then skips that layer, and drawing on it requires `force`.
+## Layer modes
+
+| mode | source | built by |
+|---|---|---|
+| `vector` | shapes → `svg/<scene>/<layer>/<layer>.NNNN.svg` (+ `.prof.json` brush profiles) | OpenToonz SVG import, then pressure patch |
+| `traced` | images → `svg/<scene>/<layer>/<layer>.NNNN.png` | OpenToonz Outline/Centerline vectorizer |
+| `raster` | shapes and images → `drawings/<scene>/<layer>.NNNN.png` | written directly |
+
+Boil variants use drawing ids `d + 1000·v` (v = 1, 2). Drawing numbers are therefore limited to 1..999.
 
 ## Timing model
-- `timing=auto`: each drawing holds until the next one, up to the scene length. With boil enabled, held runs cycle variants on twos.
-- `timing=manual` is set by `set_exposure` or by detecting a GUI retime. New drawings are then not exposed automatically.
 
-## Data on disk (all under `D:\otmcp\work`)
-- `state/<scene>.json`: MCP-only data (layer modes, shapes per drawing, hashes, timing mode).
-- `journal/<scene>.jsonl`: every action, outside change and error.
-- `notes/<scene>.md`: memory notes.
-- `snapshots/<scene>/<ts>_<tool>/`: undo data (last 60).
-- `svg/`: SVG drawing sources.
-- `renders/`: render output.
-- `tmp/`: temporary files.
-- `knowledge/`: lessons and style overrides.
+- `timing=auto`: each drawing holds until the next one. With boil on, held runs cycle the variants on twos.
+- `timing=manual` is set by `set_exposure`, `blink`, `lip_sync`, or by detecting a GUI retime. New drawings are not exposed automatically.
 
 ## Testing
-- `python -m pytest -q -m "not slow"`: unit tests, no OpenToonz needed.
-- `python -m pytest -q -m slow`: renders through the real OpenToonz.
-- `python scripts/gen_tool_docs.py`: regenerates `docs/TOOLS.md`.
+
+| command | scope |
+|---|---|
+| `pytest -m "not slow"` | unit and regression tests, no OpenToonz (CI) |
+| `pytest -m slow` | renders through the local OpenToonz install |
+| `scripts/gen_tool_docs.py [--check]` | regenerates `docs/TOOLS.md`, or verifies it is current |
+| `scripts/release_check.py [--tag vX.Y.Z]` | version and changelog gate used by CI and the release workflow |
 
 ## Conventions
-- Coordinates in the tool API are pixels with origin top-left and +y down. Frames are 1-based.
-- Internally everything is OpenToonz inches with +y up, and frames are 0-based.
-- Seeds use `zlib.crc32`, never Python `hash()`, which is randomized per process.
-- All paths are on D:. Environment variables `OPENTOONZ_HOME`, `OPENTOONZ_STUFF` and `OTMCP_WORK` override them.
+
+- **Tool API:** pixels, origin at top-left, +y down, 1-based frames, degrees.
+- **Internal:** OpenToonz inches, +y up, 0-based frames. Conversion happens only in `server.py`.
+- **Seeds:** use `zlib.crc32`, never Python `hash()`.
+- **File writes:** go through a temp file plus `os.replace`.

@@ -19,8 +19,8 @@ import contextlib
 import contextvars
 import datetime as _dt
 import functools
-import inspect
 import glob
+import inspect
 import json
 import math
 import os
@@ -34,15 +34,18 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP, Image as McpImage
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Image as McpImage
 
-from . import assets, curve, draw as drawlib, learn, physics, pli, style as styles, tnz, vec
+from . import assets, config, curve, learn, physics, pli, tnz, vec
+from . import draw as drawlib
+from . import style as styles
 from .scene import Cell, SceneDoc, file_hash
 
-OT_HOME = Path(os.environ.get("OPENTOONZ_HOME", r"D:\OpenToonz"))
-OT_STUFF = Path(os.environ.get("OPENTOONZ_STUFF", r"D:\OpenToonz stuff"))
+OT_HOME = config.opentoonz_home()
+OT_STUFF = config.opentoonz_stuff()
 PROJECT = OT_STUFF / "sandbox"
-WORK = Path(os.environ.get("OTMCP_WORK", r"D:\otmcp\work"))
+WORK = config.work_dir()
 RESEARCH = Path(os.environ.get("OTMCP_RESEARCH", Path(__file__).resolve().parent.parent / "research"))
 STATE_DIR, RENDER_DIR, SNAP_DIR = WORK / "state", WORK / "renders", WORK / "snapshots"
 JOURNAL_DIR, NOTES_DIR, SVG_DIR, TMP = WORK / "journal", WORK / "notes", WORK / "svg", WORK / "tmp"
@@ -213,28 +216,45 @@ def _restore(name: str, d: Path) -> None:
             shutil.copytree(saved, live)
 
 
+def _try_lock(fh) -> bool:
+    try:
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock(fh) -> None:
+    fh.seek(0)
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 @contextlib.contextmanager
 def _scene_lock(name: str, timeout: float = 60.0):
-    """Cross-process exclusive lock per scene (Windows msvcrt byte-range lock)."""
-    import msvcrt
+    """Cross-process exclusive lock per scene (msvcrt on Windows, flock elsewhere)."""
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
     fh = open(LOCK_DIR / f"{name}.lock", "a+b")
     t0 = time.time()
-    while True:
-        try:
-            fh.seek(0)
-            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-            break
-        except OSError:
-            if time.time() - t0 > timeout:
-                fh.close()
-                raise RuntimeError(f"scene '{name}' is busy (another MCP call holds the lock)")
-            time.sleep(0.05)
+    while not _try_lock(fh):
+        if time.time() - t0 > timeout:
+            fh.close()
+            raise RuntimeError(f"scene '{name}' is busy (another MCP call holds the lock)")
+        time.sleep(0.05)
     try:
         yield
     finally:
-        fh.seek(0)
-        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        _unlock(fh)
         fh.close()
 
 
@@ -544,7 +564,7 @@ def _run_script(lines: list[str], tag: str) -> None:
     TMP.mkdir(parents=True, exist_ok=True)
     sp = TMP / f"{tag}_{int(time.time() * 1000)}.toonzscript"
     sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    subprocess.run([str(OT_HOME / "OpenToonz.exe"), str(sp)], cwd=OT_HOME, capture_output=True, timeout=600)
+    subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, timeout=600)
     sp.unlink(missing_ok=True)
 
 
@@ -580,7 +600,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
     out_dir = TMP / f"compile_{uuid.uuid4().hex}"
     out_dir.mkdir(parents=True)
     lines = []
-    for i, (lname, L, pf) in enumerate(todo):
+    for i, (lname, L, _pf) in enumerate(todo):
         dst = (out_dir / f"{lname}.pli").as_posix()
         if L["mode"] == "traced":
             tr = L.get("trace", {})
@@ -654,7 +674,7 @@ def _trace_props(tr: dict) -> dict:
 def _tcomposer(scene_file: Path, out_pattern: Path, frame_range: tuple[int, int] | None = None,
                shrink: int = 1, timeout: float | None = None) -> str:
     out_pattern.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [str(OT_HOME / "tcomposer.exe"), str(scene_file), "-o", str(out_pattern), "-nthreads", "all"]
+    cmd = [str(config.exe("tcomposer")), str(scene_file), "-o", str(out_pattern), "-nthreads", "all"]
     if frame_range:
         cmd += ["-range", str(frame_range[0]), str(frame_range[1])]
     if shrink > 1:
@@ -665,8 +685,8 @@ def _tcomposer(scene_file: Path, out_pattern: Path, frame_range: tuple[int, int]
     try:
         r = subprocess.run(cmd, cwd=OT_HOME, capture_output=True, text=True, errors="replace", env=env,
                            timeout=timeout or 120 + 6 * n)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("tcomposer timed out (frame range outside the scene, or the scene is too heavy)")
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("tcomposer timed out (frame range outside the scene, or the scene is too heavy)") from exc
     log = (r.stdout or "") + (r.stderr or "")
     if "There were problems loading the scene" in log or "Some files may be missing" in log:
         raise RuntimeError(f"tcomposer reported missing files:\n{log[-1500:]}")
@@ -691,7 +711,7 @@ def _bg(c: Ctx) -> tuple[int, int, int, int]:
     return (b[0], b[1], b[2], 255)
 
 
-def _flat(img_path: Path, bg) -> "Image":
+def _flat(img_path: Path, bg):
     from PIL import Image
     im = Image.open(img_path).convert("RGBA")
     base = Image.new("RGBA", im.size, bg)
@@ -744,10 +764,25 @@ def _check_frames(files: list[Path], fps: float, bg, start: int = 1) -> list[str
 @tool
 def opentoonz_info() -> dict:
     """Install paths, version, scenes, and whether the OpenToonz GUI is running."""
-    r = subprocess.run([str(OT_HOME / "tcomposer.exe"), "-version"], cwd=OT_HOME, capture_output=True, text=True)
-    return {"version": (r.stdout + r.stderr).strip() or "unknown", "install": str(OT_HOME), "stuff": str(OT_STUFF),
-            "project": str(PROJECT), "scenes": _list(), "gui_running": _opentoonz_running(),
-            "styles": list(styles.STYLES), "conventions": "pixels, +y down, frames 1-based, scale 1.0=100%"}
+    problems = []
+    tc = config.exe("tcomposer")
+    if not tc.exists():
+        problems.append(f"tcomposer not found at {tc}: set OPENTOONZ_HOME to the OpenToonz install folder")
+    if not PROJECT.exists():
+        problems.append(f"sandbox project not found at {PROJECT}: set OPENTOONZ_STUFF to OpenToonz's stuff folder")
+    try:
+        ff = _ffmpeg()
+    except RuntimeError:
+        ff = None
+        problems.append("ffmpeg not found: mp4/gif renders unavailable (png sequences still work)")
+    ver = "unknown"
+    if tc.exists():
+        r = subprocess.run([str(tc), "-version"], cwd=OT_HOME, capture_output=True, text=True)
+        ver = (r.stdout + r.stderr).strip() or "unknown"
+    return {"version": ver, "install": str(OT_HOME), "stuff": str(OT_STUFF), "project": str(PROJECT),
+            "work": str(WORK), "ffmpeg": ff, "health": problems or "ok", "scenes": _list(),
+            "gui_running": _opentoonz_running(), "styles": list(styles.STYLES),
+            "conventions": "pixels, +y down, frames 1-based, scale 1.0=100%"}
 
 
 @tool
@@ -1875,7 +1910,7 @@ def open_in_opentoonz(scene: str) -> dict:
     After editing: SAVE in OpenToonz, then the MCP picks up your changes automatically."""
     c, comp = _prepare(scene)
     running = _opentoonz_running()
-    subprocess.Popen([str(OT_HOME / "OpenToonz.exe"), str(c.sf)], cwd=OT_HOME,
+    subprocess.Popen([str(config.exe("OpenToonz")), str(c.sf)], cwd=OT_HOME,
                      creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
     res = {"opened": str(c.sf), "compiled": comp.get("compiled", [])}
     if running:
@@ -1945,7 +1980,7 @@ def feedback(scene: str, rating: int, comment: str = "") -> dict:
     """Store the USER's rating (1-5) and comment about a result. Ranked highest in lessons/preferences.
     Ask the user for this after showing a render."""
     name = _load_state(scene)["name"]
-    e = learn.add("preference", f"[{rating}/5] {comment}".strip(), name, ["feedback"])
+    learn.add("preference", f"[{rating}/5] {comment}".strip(), name, ["feedback"])
     _journal(name, "feedback", {"rating": rating, "comment": comment[:300]}, "ok")
     return {"saved": True, "hint": "If the comment implies a default change, call tune_style."}
 
