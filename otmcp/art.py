@@ -102,6 +102,11 @@ def placement(x: float, y: float, scale: float = 1.0, rotation: float = 0.0, fli
     return compose((1, 0, 0, 1, x, y), compose(m, (1, 0, 0, 1, -anchor[0], -anchor[1])))
 
 
+def _mstr(m) -> str:
+    """SVG matrix() string; plain float formatting (numpy scalars would print as np.float64(...))."""
+    return "matrix(" + " ".join(f"{float(v):.12g}" for v in m) + ")"
+
+
 def _pt(m, x, y):
     a, b, c, d, e, f = m
     return a * x + c * y + e, b * x + d * y + f
@@ -148,7 +153,7 @@ def transform_shape(sh: dict, m) -> dict:
     # general case: convert to svgpath with an explicit matrix
     if t == "svgpath":
         prev = sh.get("transform")
-        mat = "matrix(%r %r %r %r %r %r)" % m
+        mat = _mstr(m)
         out["transform"] = f"{mat} {prev}" if prev else mat
         return out
     if t in ("circle", "ellipse", "rect"):
@@ -159,6 +164,6 @@ def transform_shape(sh: dict, m) -> dict:
             pts = catmull(cnt.pts, True, 8) if cnt.smooth else cnt.pts
             dparts.append("M " + " L ".join(f"{px:.3f} {py:.3f}" for px, py in pts) + " Z")
         out = {k: v for k, v in out.items() if k not in ("x", "y", "r", "rx", "ry", "w", "h", "radius", "rotation")}
-        out.update(type="svgpath", d=" ".join(dparts), transform="matrix(%r %r %r %r %r %r)" % m)
+        out.update(type="svgpath", d=" ".join(dparts), transform=_mstr(m))
         return out
     raise ValueError(f"cannot transform shape type {t} with a non-uniform matrix")

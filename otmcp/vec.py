@@ -204,6 +204,9 @@ def shape_contours(sh: dict) -> list[Contour]:
         from .art import svgpath_contours
         return [Contour(pts, closed, False) for pts, closed in
                 svgpath_contours(str(sh.get("d", "")), sh.get("transform"))]
+    if t == "image":
+        x, y, w, h = sh.get("box") or (0, 0, 0, 0)
+        return [Contour([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], True, False)] if w and h else []
     if t == "brush":
         pts = [(float(p[0]), float(p[1])) for p in sh.get("points", [])]
         return [Contour(pts, False, True)] if len(pts) >= 2 else []
@@ -322,6 +325,8 @@ def build_elements(shapes: list[dict], canvas_h: int, style_name: str | None, se
     px = canvas_h / 1080.0
     els: list[Element] = []
     for i, sh in enumerate(shapes):
+        if sh.get("type") == "image":  # composited by the raster writer, not a vector element
+            continue
         rng = random.Random((seed * 1000003 + i * 7919) & 0xFFFFFFFF)
         human = sh.get("human", True)
         amp = float(sh.get("wobble", st["wobble"])) * px if human else 0.0

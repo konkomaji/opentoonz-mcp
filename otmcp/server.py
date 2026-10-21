@@ -36,7 +36,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image as McpImage
 
-from . import curve, draw as drawlib, learn, pli, style as styles, tnz, vec
+from . import assets, curve, draw as drawlib, learn, pli, style as styles, tnz, vec
 from .scene import Cell, SceneDoc, file_hash
 
 OT_HOME = Path(os.environ.get("OPENTOONZ_HOME", r"D:\OpenToonz"))
@@ -119,7 +119,8 @@ def _now() -> str:
 
 
 def _level_path(st: dict, layer: str, mode: str) -> str:
-    return f"+drawings/{st['name']}/{layer}.pli" if mode == "vector" else f"+drawings/{st['name']}/{layer}..png"
+    return f"+drawings/{st['name']}/{layer}.pli" if mode in ("vector", "traced") \
+        else f"+drawings/{st['name']}/{layer}..png"
 
 
 def _decode(coded: str) -> Path:
@@ -282,7 +283,7 @@ class Ctx:
                 L["timing"] = "manual"
                 self.warnings.append(f"layer '{lname}': timing was edited in OpenToonz -> switched to manual "
                                      f"timing (MCP will not re-time it; use set_exposure to change).")
-            if L.get("mode") == "vector":
+            if L.get("mode") in ("vector", "traced"):
                 ph = file_hash(_pli_file(self.st, lname))
                 if L.get("pli_hash") and ph and ph != L["pli_hash"]:
                     if not L.get("gui_edited"):
@@ -344,7 +345,8 @@ class Ctx:
         L = self.layer(layer)
         lv = self.doc.level_by_path(L["level_path"])
         if lv is None:
-            return self.doc.add_level(layer, L["level_path"], None if L["mode"] == "vector" else self.doc.dpi())
+            return self.doc.add_level(layer, L["level_path"],
+                                      None if L["mode"] in ("vector", "traced") else self.doc.dpi())
         return lv["id"]
 
     # ---- commit
@@ -371,7 +373,7 @@ class Ctx:
                     L["col_hint"] = ci
             _save_state(self.st)
             pending = {f"+drawings/{self.name}/{n}.pli" for n, L in self.st["layers"].items()
-                       if L["mode"] == "vector"}
+                       if L["mode"] in ("vector", "traced")}
             soft = [p for p in problems if "file missing" in p and not any(x in p for x in pending)]
             result["verify"] = soft if soft else "ok"
             if any(L.get("dirty") for L in self.st["layers"].values()):
@@ -469,10 +471,26 @@ def _retime(c: Ctx, layer: str) -> str | None:
 
 def _write_drawing(c: Ctx, layer: str, did: int, shapes: list[dict], force: bool = False) -> None:
     L = c.layer(layer)
-    if L["mode"] == "vector" and L.get("gui_edited") and not force:
+    if L["mode"] in ("vector", "traced") and L.get("gui_edited") and not force:
         raise RuntimeError(f"layer '{layer}' drawings were edited in OpenToonz; redrawing would discard those "
                            f"edits. Pass force=true to overwrite, or draw on a new layer.")
     W, H = c.doc.camera_res()
+    stored = shapes
+    shapes = assets.expand_parts(shapes)
+    has_img = any(sh.get("type") == "image" for sh in shapes)
+    if L["mode"] == "traced":
+        if not (len(shapes) == 1 and has_img):
+            raise ValueError("traced layers take exactly one image per drawing (use import_image)")
+        src = _svg_file(c.st, layer, did).with_suffix(".png")
+        src.parent.mkdir(parents=True, exist_ok=True)
+        im = shapes[0]
+        assets.place_image(im["src"], (W, H), tuple(im["box"]) if im.get("box") else None, im.get("fit", "contain"),
+                           background="#ffffff").convert("RGB").save(src, dpi=(c.doc.dpi(), c.doc.dpi()))
+        L["drawings"][str(did)] = stored
+        L["dirty"] = True
+        return
+    if has_img and L["mode"] == "vector":
+        raise ValueError("image shapes need a raster layer, or a traced layer to become vectors (import_image)")
     variants = [0, 1, 2] if L.get("boil") else [0]
     for v in variants:
         seed = zlib.crc32(f"{c.name}/{layer}/{did}/{v}".encode()) if L.get("style") != "clean" else 0
@@ -495,9 +513,30 @@ def _write_drawing(c: Ctx, layer: str, did: int, shapes: list[dict], force: bool
         else:
             f = _png_file(c.st, layer, tid)
             f.parent.mkdir(parents=True, exist_ok=True)
-            vec.to_png(els, W, H).save(f)
-    L["drawings"][str(did)] = shapes
-    L["dirty"] = True
+            _raster_drawing(sh, W, H, sty, seed).save(f)
+    L["drawings"][str(did)] = stored
+    L["dirty"] = L["mode"] in ("vector", "traced")  # raster PNGs are final; only vector levels compile
+
+
+def _raster_drawing(shapes: list[dict], W: int, H: int, sty: str, seed: int):
+    """Paint shapes in order; image shapes are composited where they occur in the stack."""
+    from PIL import Image
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    run: list[dict] = []
+
+    def flush():
+        if run:
+            out.alpha_composite(vec.to_png(vec.build_elements(run, H, sty, seed), W, H))
+            run.clear()
+    for sh in shapes:
+        if sh.get("type") == "image":
+            flush()
+            out.alpha_composite(assets.place_image(sh["src"], (W, H), tuple(sh["box"]) if sh.get("box") else None,
+                                                   sh.get("fit", "contain")))
+        else:
+            run.append(sh)
+    flush()
+    return out
 
 
 # ====================================================================== compile (vector) / render
@@ -512,7 +551,7 @@ def _run_script(lines: list[str], tag: str) -> None:
 def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> dict:
     todo, skipped = [], []
     for lname, L in st["layers"].items():
-        if L["mode"] != "vector" or (only and lname not in only):
+        if L["mode"] not in ("vector", "traced") or (only and lname not in only):
             continue
         pf = _pli_file(st, lname)
         if not (L.get("dirty") or not pf.exists() or force):
@@ -525,10 +564,11 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
             continue
         valid = {int(d) + BOIL_BASE * v for d in L["drawings"] for v in ((0, 1, 2) if L.get("boil") else (0,))}
         for f in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*"):
-            m = re.match(rf"{re.escape(lname)}\.(\d+)\.(svg|prof\.json)$", f.name)
+            m = re.match(rf"{re.escape(lname)}\.(\d+)\.(svg|prof\.json|png)$", f.name)
             if m and int(m.group(1)) not in valid:
                 f.unlink()
-        svgs = sorted((SVG_DIR / st["name"] / lname).glob(f"{lname}.*.svg"))
+        ext = "png" if L["mode"] == "traced" else "svg"
+        svgs = sorted((SVG_DIR / st["name"] / lname).glob(f"{lname}.*.{ext}"))
         if svgs:
             todo.append((lname, L, pf))
     if not todo:
@@ -541,9 +581,18 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
     out_dir.mkdir(parents=True)
     lines = []
     for i, (lname, L, pf) in enumerate(todo):
-        src = (SVG_DIR / st["name"] / lname / f"{lname}..svg").as_posix()
         dst = (out_dir / f"{lname}.pli").as_posix()
-        lines += [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});", f"l{i}.save({json.dumps(dst)});"]
+        if L["mode"] == "traced":
+            tr = L.get("trace", {})
+            src = (SVG_DIR / st["name"] / lname / f"{lname}..png").as_posix()
+            kind = "CenterlineVectorizer" if tr.get("kind") == "centerline" else "OutlineVectorizer"
+            lines += [f"var s{i} = new Level();", f"s{i}.load({json.dumps(src)});", f"var v{i} = new {kind}();"]
+            for prop, val in _trace_props(tr).items():
+                lines.append(f"v{i}.{prop} = {json.dumps(val)};")
+            lines += [f"var l{i} = v{i}.vectorize(s{i});", f"l{i}.save({json.dumps(dst)});"]
+        else:
+            src = (SVG_DIR / st["name"] / lname / f"{lname}..svg").as_posix()
+            lines += [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});", f"l{i}.save({json.dumps(dst)});"]
     t0 = time.time()
     _run_script(lines, "compile")
     done, failed = [], []
@@ -554,6 +603,12 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
             continue
         pf.parent.mkdir(parents=True, exist_ok=True)
         os.replace(built, pf)
+        if L["mode"] == "traced":  # faithful trace: no stylised pressure
+            _, strokes = pli.read(str(pf))
+            L["dirty"], L["pli_hash"], L["gui_edited"] = False, file_hash(pf), False
+            done.append({"layer": lname, "strokes": len(strokes), "frames": len({k.frame for k in strokes}),
+                         "traced": L.get("trace", {}).get("kind", "outline")})
+            continue
         s = styles.get(L.get("style") or st["style"])
         profiles = {}
         for side in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*.prof.json"):
@@ -584,6 +639,16 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
     if skipped:
         res["skipped_gui_edited"] = skipped
     return res
+
+
+def _trace_props(tr: dict) -> dict:
+    """OpenToonz script vectorizer properties (scriptbinding_*_vectorizer.h)."""
+    if tr.get("kind") == "centerline":
+        keys = {"threshold": 8, "accuracy": 9, "despeckling": 5, "maxThickness": 200, "preservePaintedAreas": True}
+    else:
+        keys = {"accuracy": 8, "despeckling": 4, "maxColors": 12, "preservePaintedAreas": True,
+                "transparentColor": "#ffffff", "toneThreshold": 128}
+    return {k: tr.get(k, v) for k, v in keys.items()}
 
 
 def _tcomposer(scene_file: Path, out_pattern: Path, frame_range: tuple[int, int] | None = None,
@@ -893,13 +958,13 @@ def add_layer(scene: str, layer: str, mode: str = "vector", style: str | None = 
     clash = [n for n in c.st["layers"] if n.lower() == name.lower()]
     if clash:  # Windows paths are case-insensitive: 'Ball' and 'ball' would share files
         raise ValueError(f"layer '{clash[0]}' already exists (names are case-insensitive)")
-    if mode not in ("vector", "raster"):
-        raise ValueError("mode must be vector or raster")
+    if mode not in ("vector", "raster", "traced"):
+        raise ValueError("mode must be vector, raster or traced")
     c.st["layers"][name] = {"mode": mode, "style": style, "drawings": {}, "timing": "auto", "boil": boil,
                             "level_path": _level_path(c.st, name, mode), "dirty": False}
     old = c.doc.level_by_path(_level_path(c.st, name, mode))
     lid = old["id"] if old else c.doc.add_level(name, _level_path(c.st, name, mode),
-                                                 None if mode == "vector" else c.doc.dpi())
+                                                 None if mode in ("vector", "traced") else c.doc.dpi())
     ci = c.doc.add_column(lid, name)
     if parent and parent.lower() != "table":
         c.doc.set_parent(f"Col{ci + 1}", c.stage_id(parent))
@@ -972,7 +1037,7 @@ def delete_layer(scene: str, layer: str) -> dict:
     if lv and not any(lv["id"] in c.doc.column_level_ids(k) for k in range(len(c.doc.columns()))):
         c.doc.remove_level(lv["id"])
     shutil.rmtree(SVG_DIR / c.name / name, ignore_errors=True)
-    if L["mode"] == "vector":
+    if L["mode"] in ("vector", "traced"):
         _pli_file(c.st, name).unlink(missing_ok=True)
     else:
         for f in (PROJECT / "drawings" / c.name).glob(f"{name}.*.png"):
@@ -1342,6 +1407,85 @@ def camera_move(scene: str, kind: str, start: int, end: int | None = None, dx: f
 
 
 # ====================================================================== tools: output
+@tool
+def import_image(scene: str, layer: str, path: str, frame: int = 1, box: list[float] | None = None,
+                 fit: str = "contain", trace: str | None = None, max_colors: int = 12, accuracy: int = 8,
+                 despeckling: int = 4, threshold: int = 8) -> dict:
+    """Bring a picture (sketch, scanned drawing, painting, photo, AI image) into a layer.
+
+    Raster layer (mode 'raster'): the image is placed as-is. Traced layer (add_layer mode='traced'):
+    OpenToonz's own vectorizer turns it into editable vector strokes and fills on compile.
+    trace: set the traced layer's method once: 'outline' (colour regions) | 'centerline' (ink lines).
+    box [x,y,w,h] px (default whole canvas); fit contain | cover | stretch | none."""
+    _check_drawing_id(frame)
+    if fit not in ("contain", "cover", "stretch", "none"):
+        raise ValueError("fit must be contain, cover, stretch or none")
+    if not Path(path).exists():
+        raise ValueError(f"image not found: {path}")
+    c = Ctx(scene, "import_image", {"layer": layer, "path": path, "frame": frame, "trace": trace})
+    name = _safe(layer)
+    L = c.layer(name)
+    if L["mode"] == "vector":
+        raise ValueError("vector layers are drawn from shapes; use a 'raster' or 'traced' layer for images")
+    if L["mode"] == "traced":
+        if trace and trace not in ("outline", "centerline"):
+            raise ValueError("trace must be 'outline' or 'centerline'")
+        tr = L.setdefault("trace", {})
+        if trace:
+            tr["kind"] = trace
+        tr.update({"maxColors": max_colors, "accuracy": accuracy, "despeckling": despeckling,
+                   "threshold": threshold})
+    shape = {"type": "image", "src": str(Path(path).resolve()), "fit": fit}
+    if box:
+        shape["box"] = [float(v) for v in box]
+    _write_drawing(c, name, frame, [shape])
+    msg = _retime(c, name)
+    if msg:
+        c.warnings.append(msg)
+    return c.commit({"layer": name, "drawing": frame, "mode": L["mode"],
+                     "next": "compile_vectors / preview_frame to build and check the trace"
+                     if L["mode"] == "traced" else "preview_frame to check placement"})
+
+
+@tool
+def import_svg(scene: str, layer: str, path: str, frame: int = 1, box: list[float] | None = None,
+               human: bool = False, force: bool = False) -> dict:
+    """Import an SVG file (Inkscape/Illustrator/free assets) as editable vector shapes on a drawing.
+    Every path becomes an 'svgpath' shape you can tween, recolour or humanize (human=true adds the
+    hand-drawn wobble/pressure of the layer style). box [x,y,w,h] fits the art (default whole canvas)."""
+    _check_drawing_id(frame)
+    if not Path(path).exists():
+        raise ValueError(f"svg not found: {path}")
+    c = Ctx(scene, "import_svg", {"layer": layer, "path": path, "frame": frame})
+    name = _safe(layer)
+    W, H = c.doc.camera_res()
+    shapes = assets.svg_file_to_shapes(path, tuple(box) if box else None, (W, H), human)
+    _write_drawing(c, name, frame, shapes, force)
+    msg = _retime(c, name)
+    if msg:
+        c.warnings.append(msg)
+    return c.commit({"layer": name, "drawing": frame, "shapes": len(shapes)})
+
+
+@tool
+def save_part(name: str, shapes: list[dict], anchor: list[float] | None = None,
+              variants: dict[str, list[dict]] | None = None, notes: str = "") -> dict:
+    """Save a reusable part to the global model-sheet library (head, eye, hand, mouth chart, prop).
+    shapes use the part's own coordinates; anchor [x,y] is its attachment/pivot point.
+    variants: alternative drawings by name, e.g. {"closed": [...], "A": [...], "O": [...]}.
+    Use in any drawing as {"type":"part","name":..,"variant":..,"x","y","scale","rotation","flip"}."""
+    vec.build_elements(assets.expand_parts(shapes), 1080, "clean", 0)  # validate drawable before saving
+    for vs in (variants or {}).values():
+        vec.build_elements(assets.expand_parts(vs), 1080, "clean", 0)
+    return assets.save_part(name, shapes, tuple(anchor or (0, 0)), variants, notes)
+
+
+@tool
+def list_parts() -> list[dict]:
+    """Parts in the model-sheet library with their variants."""
+    return assets.list_parts()
+
+
 @tool
 def compile_vectors(scene: str, force: bool = False) -> dict:
     """Convert pending vector drawings to native OpenToonz .pli levels with pen-pressure lines.
