@@ -81,7 +81,7 @@ def _resample(poly, closed, spacing):
     total = sum(seg)
     if total == 0:
         return list(poly)
-    n = max(4 if closed else 2, round(total / spacing))
+    n = min(2000, max(4 if closed else 2, round(total / spacing)))
     out, d, i, acc = [], 0.0, 0, 0.0
     step = total / (n if closed else n - 1)
     for k in range(n):
@@ -152,9 +152,14 @@ def _text_contours(sh) -> list[Contour]:
         gs[g].draw(Pen(adv))
         adv += gs[g].width
     anchor = sh.get("anchor", "mm")
-    ascent = f["hhea"].ascent
+    ascent, descent = f["hhea"].ascent, f["hhea"].descent  # descent is negative (font units, y up)
     ox = {"l": 0, "m": -adv / 2, "r": -adv}.get(anchor[0], -adv / 2)
-    oy = {"t": ascent, "m": ascent / 2 - 0.1 * upem, "s": 0, "b": 0}.get(anchor[1] if len(anchor) > 1 else "m", 0)
+    # Pillow anchors: a=ascender, d=descender, s=baseline, m=middle of a/d; t/b = top/bottom of the ink
+    va = anchor[1] if len(anchor) > 1 else "m"
+    oy = {"a": ascent, "d": descent, "s": 0, "m": (ascent + descent) / 2}.get(va, 0)
+    if va in ("t", "b"):
+        ys = [y for c in glyph_contours for _, y in c]
+        oy = (max(ys) if va == "t" else min(ys)) if ys else 0
     x0, y0 = float(sh.get("x", 0)), float(sh.get("y", 0))
     out = []
     for c in glyph_contours:
@@ -186,6 +191,8 @@ def shape_contours(sh: dict) -> list[Contour]:
     if t in ("polygon", "path", "line", "polyline"):
         pts = [(float(p[0]), float(p[1])) for p in sh.get("points", [])]
         closed = t == "polygon" or bool(sh.get("closed", False))
+        if len(pts) < (3 if closed else 2):
+            return []  # degenerate: nothing drawable
         if rot and pts:
             cx = sum(p[0] for p in pts) / len(pts)
             cy = sum(p[1] for p in pts) / len(pts)
@@ -212,7 +219,7 @@ def _noise_fn(rng: random.Random, wavelength: float):
 def humanize(c: Contour, rng: random.Random, amp: float, wavelength: float, overshoot_p: float,
              jitter: float = 0.015) -> Contour:
     """Hand-drawn imperfection. amp in px. Seeded per drawing, so held frames never boil."""
-    if amp <= 0 and jitter <= 0:
+    if amp <= 0:  # clean / wobble 0: geometry must stay exactly as drawn
         return c
     pts = list(c.pts)
     if 2 <= len(pts) <= 16:  # jitter sparse control points only; dense samples (svgpath/text) would turn jagged
@@ -268,9 +275,13 @@ def _poly(contours: list[Contour]):
     for c in contours:
         if c.closed and len(c.pts) >= 3:
             pts = catmull(c.pts, True, 6) if c.smooth else c.pts
-            p = Polygon(pts).buffer(0)
-            if not p.is_empty:
-                polys.append(p)
+            from shapely import make_valid
+            g = make_valid(Polygon(pts))  # keeps every lobe of self-intersecting shapes (buffer(0) drops some)
+            parts = [x for x in getattr(g, "geoms", [g]) if x.geom_type in ("Polygon", "MultiPolygon")]
+            if parts:
+                p = unary_union(parts)
+                if not p.is_empty:
+                    polys.append(p)
     if not polys:
         return None
     # even-odd: glyph holes cancel
@@ -317,6 +328,9 @@ def build_elements(shapes: list[dict], canvas_h: int, style_name: str | None, se
         cs = shape_contours(sh)
         if not cs:
             continue
+        lim = 100000.0 * px  # OpenToonz stores coords as int32 at 128x precision -> overflow past ~131k units
+        if any(abs(x) > lim or abs(y) > lim for c in cs for x, y in c.pts):
+            raise ValueError(f"shape {i} ({sh.get('type')}) has coordinates beyond +/-{lim:.0f} px")
         if sh.get("type") != "text":
             cs = [humanize(c, rng, amp, st["wavelength"] * px, st["overshoot_ends"], 0.015 if human else 0)
                   for c in cs]
@@ -441,6 +455,8 @@ def to_png(els: list[Element], width: int, height: int, ss: int = 2) -> Image.Im
             mask = Image.new("L", big.size, 0)
             md = ImageDraw.Draw(mask)
             for c in e.contours:  # even-odd so glyph holes stay open
+                if len(c.pts) < 3:
+                    continue
                 tmp = Image.new("L", big.size, 0)
                 pts = catmull(c.pts, True, 6) if c.smooth else c.pts
                 ImageDraw.Draw(tmp).polygon([(x * ss, y * ss) for x, y in pts], fill=255)
@@ -449,6 +465,8 @@ def to_png(els: list[Element], width: int, height: int, ss: int = 2) -> Image.Im
         if e.stroke:
             w = max(1, round(e.width * ss))
             for c in e.contours:
+                if len(c.pts) < 2:
+                    continue
                 pts = catmull(c.pts, c.closed, 6) if c.smooth else c.pts + ([c.pts[0]] if c.closed else [])
                 if c.smooth and c.closed:
                     pts = pts + [pts[0]]

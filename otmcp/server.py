@@ -15,8 +15,11 @@ scale 1.0 = 100%; rotation degrees counter-clockwise.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime as _dt
 import functools
+import inspect
 import glob
 import json
 import math
@@ -26,6 +29,7 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 import zlib
 from pathlib import Path
 from typing import Any
@@ -42,7 +46,9 @@ WORK = Path(os.environ.get("OTMCP_WORK", r"D:\otmcp\work"))
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 STATE_DIR, RENDER_DIR, SNAP_DIR = WORK / "state", WORK / "renders", WORK / "snapshots"
 JOURNAL_DIR, NOTES_DIR, SVG_DIR, TMP = WORK / "journal", WORK / "notes", WORK / "svg", WORK / "tmp"
-MAX_SNAPSHOTS = 60
+MAX_SNAPSHOTS = 30
+LOCK_DIR = WORK / "locks"
+INTERPS = ("ease", "linear", "constant", "speed", "exp", "ease_frames")
 BOIL_BASE = 1000  # boil variant drawing ids: d + 1000*v
 
 mcp = FastMCP("opentoonz", instructions=(
@@ -93,7 +99,7 @@ def _load_state(scene: str) -> dict:
 
 def _save_state(st: dict) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = _state_path(st["name"]).with_suffix(".tmp")
+    tmp = _state_path(st["name"]).with_name(f"{st['name']}.{uuid.uuid4().hex}.tmp")
     tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
     os.replace(tmp, _state_path(st["name"]))
 
@@ -164,22 +170,71 @@ def _journal_tail(scene: str, n: int = 15) -> list[dict]:
     return [json.loads(x) for x in lines if x.strip()]
 
 
-def _snapshot(st: dict, label: str, extra_files: list[Path] = ()) -> None:
-    d = SNAP_DIR / st["name"] / f"{time.strftime('%Y%m%d-%H%M%S')}_{int(time.time() * 1000) % 1000:03d}_{label}"
+_CALL_SNAPS: contextvars.ContextVar = contextvars.ContextVar("otmcp_call_snaps", default=None)
+
+
+def _snapshot(name: str, label: str) -> Path:
+    """Full pre-operation snapshot: scene, MCP state, SVG sources and drawing files of the scene."""
+    # zero-padded ns sequence: lexical order == creation order even for calls in the same second
+    d = SNAP_DIR / name / f"{time.time_ns():020d}_{_safe(label)}"
     d.mkdir(parents=True, exist_ok=True)
-    sf = _scene_file(st["name"])
+    sf = _scene_file(name)
     if sf.exists():
         shutil.copy2(sf, d / "scene.tnz")
-    if _state_path(st["name"]).exists():
-        shutil.copy2(_state_path(st["name"]), d / "state.json")
-    for f in extra_files:
-        if Path(f).exists():
-            (d / "files").mkdir(exist_ok=True)
-            shutil.copy2(f, d / "files" / Path(f).name)
-            (d / "files" / (Path(f).name + ".origin")).write_text(str(f), encoding="utf-8")
-    snaps = sorted((SNAP_DIR / st["name"]).iterdir())
+    if _state_path(name).exists():
+        shutil.copy2(_state_path(name), d / "state.json")
+    for src, dst in ((SVG_DIR / name, d / "svg"), (PROJECT / "drawings" / name, d / "drawings")):
+        if src.exists():
+            shutil.copytree(src, dst)
+    (d / "complete").write_text("1", encoding="utf-8")
+    snaps = sorted(x for x in (SNAP_DIR / name).iterdir() if x.is_dir())
     for old in snaps[:-MAX_SNAPSHOTS]:
         shutil.rmtree(old, ignore_errors=True)
+    lst = _CALL_SNAPS.get()
+    if lst is not None:
+        lst.append(d)
+    return d
+
+
+def _restore(name: str, d: Path) -> None:
+    """Make scene, state, SVG sources and drawings exactly what they were in snapshot d."""
+    if (d / "scene.tnz").exists():
+        shutil.copy2(d / "scene.tnz", _scene_file(name))
+    else:
+        _scene_file(name).unlink(missing_ok=True)
+    if (d / "state.json").exists():
+        shutil.copy2(d / "state.json", _state_path(name))
+    else:
+        _state_path(name).unlink(missing_ok=True)
+    for live, saved in ((SVG_DIR / name, d / "svg"), (PROJECT / "drawings" / name, d / "drawings")):
+        shutil.rmtree(live, ignore_errors=True)
+        if saved.exists():
+            shutil.copytree(saved, live)
+
+
+@contextlib.contextmanager
+def _scene_lock(name: str, timeout: float = 60.0):
+    """Cross-process exclusive lock per scene (Windows msvcrt byte-range lock)."""
+    import msvcrt
+    LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    fh = open(LOCK_DIR / f"{name}.lock", "a+b")
+    t0 = time.time()
+    while True:
+        try:
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            break
+        except OSError:
+            if time.time() - t0 > timeout:
+                fh.close()
+                raise RuntimeError(f"scene '{name}' is busy (another MCP call holds the lock)")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        fh.close()
 
 
 def _opentoonz_running() -> bool:
@@ -205,6 +260,8 @@ class Ctx:
             raise ValueError(f"scene file missing: {self.sf}")
         self.doc = SceneDoc.load(self.sf)
         self._detect_external()
+        if mutate:
+            _snapshot(self.name, tool)  # before ANY side effect of the operation (files included)
 
     # ---- context awareness
     def _detect_external(self) -> None:
@@ -234,7 +291,8 @@ class Ctx:
                     L["gui_edited"] = True
 
     def _cells_sig(self, ci: int) -> str:
-        return ",".join(f"{c.level_id}:{c.fid}" if c else "-" for c in self.doc.column_cells(ci))
+        # frame ids only: OpenToonz renumbers persist ids (level ids) on every save
+        return ",".join(c.fid if c else "-" for c in self.doc.column_cells(ci))
 
     # ---- mapping layers <-> columns
     def col_index(self, layer: str) -> int | None:
@@ -248,6 +306,12 @@ class Ctx:
         for ci in range(len(self.doc.columns())):
             if self.doc.stage_name(f"Col{ci + 1}") == layer:
                 return ci
+        # an empty column renamed in the GUI: fall back to the remembered column if it is still empty
+        hint = L.get("col_hint") if L else None
+        if hint is not None and hint < len(self.doc.columns()) and not self.doc.column_cells(hint):
+            others = [n for n in self.st["layers"] if n != layer and self.st["layers"][n].get("col_hint") == hint]
+            if not others:
+                return hint
         return None
 
     def layer(self, name: str) -> dict:
@@ -263,6 +327,10 @@ class Ctx:
         if t.lower() == "table":
             return "Table"
         if re.fullmatch(r"(Col|Peg|Camera)\d+", t):
+            if t.startswith("Col") and not 1 <= int(t[3:]) <= len(self.doc.columns()):
+                raise ValueError(f"{t} does not exist (scene has {len(self.doc.columns())} columns)")
+            if not t.startswith("Col") and self.doc.pegbar(t) is None:
+                raise ValueError(f"{t} does not exist")
             return t
         for pid in self.doc.peg_ids():
             if self.doc.stage_name(pid) == _safe(t):
@@ -282,11 +350,10 @@ class Ctx:
     # ---- commit
     def commit(self, result: dict) -> dict:
         if self.mutate:
-            _snapshot(self.st, self.tool)
             self.doc.set_output_range(self.st["frames"])
             text = self.doc.text()
-            tmp = self.sf.with_suffix(".tnz.tmp")
-            tmp.write_text(text, encoding="utf-8")
+            tmp = self.sf.with_name(f"{self.name}.{uuid.uuid4().hex}.tnz.tmp")
+            tmp.write_text(text, encoding="utf-8", errors="surrogateescape")
             # double check: parse what we wrote before replacing the scene
             check = SceneDoc.load(tmp)
             problems = check.verify(_level_file_exists)
@@ -301,6 +368,7 @@ class Ctx:
                 if ci is not None:
                     L["cells_sig"] = self._cells_sig(ci)
                     L["column_seen"] = True
+                    L["col_hint"] = ci
             _save_state(self.st)
             pending = {f"+drawings/{self.name}/{n}.pli" for n, L in self.st["layers"].items()
                        if L["mode"] == "vector"}
@@ -321,18 +389,37 @@ class Ctx:
 
 
 def tool(fn):
-    """Register an MCP tool with uniform error reporting."""
+    """Register an MCP tool: per-scene lock, automatic rollback of a failed operation, error journal."""
+    sig = inspect.signature(fn)
+
     @functools.wraps(fn)
     def wrapper(*a, **k):
         try:
-            return fn(*a, **k)
-        except Exception as e:  # surface as structured error the model can act on
-            scene = k.get("scene") or (a[0] if a else None)
-            sname = _safe(scene) if isinstance(scene, str) and re.search(r"\w", scene) else None
+            bound = sig.bind_partial(*a, **k).arguments
+        except TypeError:
+            bound = {}
+        raw = bound.get("scene") or (bound.get("name") if fn.__name__ == "create_scene" else None)
+        sname = _safe(raw) if isinstance(raw, str) and re.search(r"\w", raw) else None
+        snaps: list[Path] = []
+        token = _CALL_SNAPS.set(snaps)
+        try:
+            with (_scene_lock(sname) if sname else contextlib.nullcontext()):
+                try:
+                    return fn(*a, **k)
+                except Exception:
+                    if snaps:  # roll back every side effect of this failed call
+                        _restore(sname, snaps[0])
+                        for d in snaps:
+                            shutil.rmtree(d, ignore_errors=True)
+                    raise
+        except Exception as e:
             if sname and _state_path(sname).exists():
-                _journal(sname, fn.__name__ + ":error", k, str(e))
-            learn.add("error", f"{fn.__name__}: {e}", sname, tags=[fn.__name__], advice=learn.advice_for(str(e)))
+                _journal(sname, fn.__name__ + ":error", {kk: str(v)[:200] for kk, v in k.items()}, str(e))
+            if not isinstance(e, ValueError):  # input mistakes are not lessons; real failures are
+                learn.add("error", f"{fn.__name__}: {e}", sname, tags=[fn.__name__], advice=learn.advice_for(str(e)))
             raise RuntimeError(f"{type(e).__name__}: {e}") from e
+        finally:
+            _CALL_SNAPS.reset(token)
     return mcp.tool()(wrapper)
 
 
@@ -345,14 +432,22 @@ def _auto_cells(L: dict, frames: int) -> list[int]:
             if d <= row:
                 cur = d
         cells.append(cur)
-    if L.get("boil"):
-        out, run = [], 0
-        for i, d in enumerate(cells):
-            run = run + 1 if i and cells[i - 1] == d else 0
-            v = (run // 2) % 3
-            out.append(d + BOIL_BASE * v if d and v else d)
-        cells = out
-    return cells
+    return _boil_cycle(cells) if L.get("boil") else cells
+
+
+def _boil_cycle(cells: list[int]) -> list[int]:
+    """Held runs cycle the 3 boil variants on twos: d, d+1000, d+2000, d, ..."""
+    out, run = [], 0
+    for i, d in enumerate(cells):
+        run = run + 1 if i and cells[i - 1] == d else 0
+        v = (run // 2) % 3
+        out.append(d + BOIL_BASE * v if d and v else d)
+    return out
+
+
+def _check_drawing_id(frame) -> None:
+    if not isinstance(frame, int) or isinstance(frame, bool) or not 1 <= frame < BOIL_BASE:
+        raise ValueError(f"drawing/frame number must be an integer 1..{BOIL_BASE - 1}, got {frame!r}")
 
 
 def _apply_cells(c: Ctx, layer: str, cells: list[int]) -> None:
@@ -422,6 +517,9 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         pf = _pli_file(st, lname)
         if not (L.get("dirty") or not pf.exists() or force):
             continue
+        ph = file_hash(pf)
+        if L.get("pli_hash") and ph and ph != L["pli_hash"]:
+            L["gui_edited"] = True  # changed on disk since our last compile (OpenToonz GUI edit)
         if L.get("gui_edited") and not force:
             skipped.append(lname)
             continue
@@ -434,26 +532,28 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         if svgs:
             todo.append((lname, L, pf))
     if not todo:
+        _save_state(st)
         return {"compiled": [], "skipped_gui_edited": skipped}
-    _snapshot(st, "compile", [p for _, _, p in todo])
+    if force and any(L.get("gui_edited") for _, L, _ in todo):
+        _snapshot(st["name"], "compile_force")
+    # build into a private temp folder, then swap in atomically; existing .pli files are never deleted first
+    out_dir = TMP / f"compile_{uuid.uuid4().hex}"
+    out_dir.mkdir(parents=True)
     lines = []
-    for lname, L, pf in todo:
-        pf.parent.mkdir(parents=True, exist_ok=True)
+    for i, (lname, L, pf) in enumerate(todo):
         src = (SVG_DIR / st["name"] / lname / f"{lname}..svg").as_posix()
-        lines += [f'l_{lname} = new Level()', f'l_{lname}.load("{src}")', f'l_{lname}.save("{pf.as_posix()}")']
+        dst = (out_dir / f"{lname}.pli").as_posix()
+        lines += [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});", f"l{i}.save({json.dumps(dst)});"]
     t0 = time.time()
-    for _, _, pf in todo:
-        pf.unlink(missing_ok=True)
     _run_script(lines, "compile")
     done, failed = [], []
     for lname, L, pf in todo:
-        # OpenToonz also drops a 'name..pli' twin next to the target; remove it
-        twin = pf.with_name(pf.stem + "..pli")
-        if twin.exists():
-            twin.unlink()
-        if not pf.exists():
+        built = out_dir / f"{lname}.pli"
+        if not built.exists():
             failed.append(lname)
             continue
+        pf.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(built, pf)
         s = styles.get(L.get("style") or st["style"])
         profiles = {}
         for side in (SVG_DIR / st["name"] / lname).glob(f"{lname}.*.prof.json"):
@@ -476,6 +576,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         if rep.get("profile_mismatch_frames"):
             item["brush_pressure_skipped_frames"] = rep["profile_mismatch_frames"]
         done.append(item)
+    shutil.rmtree(out_dir, ignore_errors=True)
     _save_state(st)
     res = {"compiled": done, "seconds": round(time.time() - t0, 1)}
     if failed:
@@ -486,7 +587,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
 
 
 def _tcomposer(scene_file: Path, out_pattern: Path, frame_range: tuple[int, int] | None = None,
-               shrink: int = 1) -> str:
+               shrink: int = 1, timeout: float | None = None) -> str:
     out_pattern.parent.mkdir(parents=True, exist_ok=True)
     cmd = [str(OT_HOME / "tcomposer.exe"), str(scene_file), "-o", str(out_pattern), "-nthreads", "all"]
     if frame_range:
@@ -495,12 +596,17 @@ def _tcomposer(scene_file: Path, out_pattern: Path, frame_range: tuple[int, int]
         cmd += ["-shrink", str(shrink)]
     TMP.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, TEMP=str(TMP), TMP=str(TMP))
-    r = subprocess.run(cmd, cwd=OT_HOME, capture_output=True, text=True, errors="replace", env=env, timeout=3600)
+    n = (frame_range[1] - frame_range[0] + 1) if frame_range else 500
+    try:
+        r = subprocess.run(cmd, cwd=OT_HOME, capture_output=True, text=True, errors="replace", env=env,
+                           timeout=timeout or 120 + 6 * n)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("tcomposer timed out (frame range outside the scene, or the scene is too heavy)")
     log = (r.stdout or "") + (r.stderr or "")
+    if "There were problems loading the scene" in log or "Some files may be missing" in log:
+        raise RuntimeError(f"tcomposer reported missing files:\n{log[-1500:]}")
     if "completed" not in log:
         raise RuntimeError(f"tcomposer failed (exit {r.returncode}):\n{log[-2000:]}")
-    if "problems loading" in log or "missing" in log.lower():
-        raise RuntimeError(f"tcomposer reported missing files:\n{log[-1500:]}")
     return log
 
 
@@ -528,7 +634,7 @@ def _flat(img_path: Path, bg) -> "Image":
     return base.convert("RGB")
 
 
-def _check_frames(files: list[Path], fps: float, bg) -> list[str]:
+def _check_frames(files: list[Path], fps: float, bg, start: int = 1) -> list[str]:
     """Double-check renders: blank frames, photosensitive flashing (>3 flashes/s)."""
     from PIL import ImageStat
     issues, lum, blank = [], [], []
@@ -552,7 +658,7 @@ def _check_frames(files: list[Path], fps: float, bg) -> list[str]:
             med = moving[len(moving) // 2]
             for i, d in enumerate(diffs):
                 if d > max(6 * med, 4.0):
-                    issues.append(f"pop at frame {i + 2}: image jumps {d / max(med, 0.01):.0f}x more than typical")
+                    issues.append(f"pop at frame {start + i + 1}: image jumps {d / max(med, 0.01):.0f}x more than typical")
                     break
         still, longest = 0, 0
         for d in diffs:
@@ -598,7 +704,8 @@ def scene_context(scene: str) -> dict:
                        "boil": L.get("boil", False), "gui_edited": L.get("gui_edited", False),
                        "needs_compile": L.get("dirty", False),
                        "drawings": sorted(int(k) for k in L["drawings"]),
-                       "exposure": _compact([int(x.fid) if x and x.fid.isdigit() else (x.fid if x else 0) for x in cells]),
+                       "exposure": _compact([(int(x.fid) % BOIL_BASE) if x and x.fid.isdigit() else (x.fid if x else 0)
+                                             for x in cells]),
                        "parent": c.doc.parent_of(f"Col{ci + 1}") if ci is not None else None,
                        "keys": _keys_px(c.doc.get_params(f"Col{ci + 1}"), dpi) if ci is not None else {}})
     foreign = []
@@ -679,32 +786,21 @@ def style_guide(topic: str = "rules") -> str:
 @tool
 def undo(scene: str, steps: int = 1) -> dict:
     """Restore the scene (and any overwritten vector levels) to the state before the last N MCP writes."""
-    name = _load_state(scene)["name"]
-    snaps = sorted((SNAP_DIR / name).iterdir()) if (SNAP_DIR / name).exists() else []
-    if len(snaps) < steps:
-        raise ValueError(f"only {len(snaps)} snapshots available")
+    name = _safe(scene)
+    root = SNAP_DIR / name
+    snaps = sorted(x for x in root.iterdir() if x.is_dir() and (x / "complete").exists()) if root.exists() else []
+    if steps < 1 or len(snaps) < steps:
+        raise ValueError(f"only {len(snaps)} undo steps available")
     target = snaps[-steps]
-    if (target / "scene.tnz").exists():
-        shutil.copy2(target / "scene.tnz", _scene_file(name))
-    if (target / "state.json").exists():
-        shutil.copy2(target / "state.json", _state_path(name))
-    restored = []
-    if (target / "files").exists():
-        for o in (target / "files").glob("*.origin"):
-            dst = Path(o.read_text(encoding="utf-8"))
-            shutil.copy2(target / "files" / o.name[:-7], dst)
-            restored.append(str(dst))
-    st = _load_state(name)
-    st["tnz_hash"] = file_hash(_scene_file(name))
-    for lname, L in st["layers"].items():
-        if L["mode"] == "vector":
-            L["pli_hash"] = file_hash(_pli_file(st, lname))
-            L["dirty"] = True  # svgs may be newer than restored state; recompile on demand
-    _save_state(st)
-    for s in snaps[-steps:]:
-        shutil.rmtree(s, ignore_errors=True)
+    _restore(name, target)  # scene, state, SVG sources and drawing files exactly as before that operation
+    if _state_path(name).exists():
+        st = _load_state(name)
+        st["tnz_hash"] = file_hash(_scene_file(name))
+        _save_state(st)
+    for d in snaps[-steps:]:
+        shutil.rmtree(d, ignore_errors=True)
     _journal(name, "undo", {"steps": steps}, {"restored": target.name})
-    return {"restored_to_before": target.name.split("_", 2)[-1], "files": restored}
+    return {"restored_to_before": target.name.split("_", 1)[-1], "remaining_undo": len(snaps) - steps}
 
 
 # ====================================================================== tools: scene setup
@@ -718,8 +814,8 @@ def create_scene(name: str, width: int = 1920, height: int = 1080, fps: float = 
         raise ValueError(f"style must be one of {list(styles.STYLES)}")
     if (_scene_file(name).exists() or _state_path(name).exists()) and not overwrite:
         raise ValueError(f"scene '{name}' exists; call scene_context('{name}') to continue it, or overwrite=true")
-    if _state_path(name).exists():
-        _snapshot(_load_state(name), "overwrite")
+    if _state_path(name).exists() or _scene_file(name).exists():
+        _snapshot(name, "overwrite")  # old scene, sources and drawings stay recoverable with undo
     for d in (SVG_DIR / name, PROJECT / "drawings" / name):
         shutil.rmtree(d, ignore_errors=True)
     dpi = 120.0
@@ -731,18 +827,23 @@ def create_scene(name: str, width: int = 1920, height: int = 1080, fps: float = 
     st = {"name": name, "style": style, "frames": frames, "layers": {}, "created": _now(),
           "tnz_hash": file_hash(_scene_file(name))}
     _save_state(st)
-    (JOURNAL_DIR / f"{name}.jsonl").unlink(missing_ok=True)
     _journal(name, "create_scene", {"w": width, "h": height, "fps": fps, "frames": frames, "style": style}, "ok")
     return {"scene": name, "file": str(_scene_file(name)), "style": style,
             "timing_hint": f"{style}: animate on {styles.get(style)['exposure']}s by default"}
 
 
 @tool
-def import_scene(path: str, name: str | None = None) -> dict:
+def import_scene(path: str, name: str | None = None, overwrite: bool = False) -> dict:
     """Bring an existing OpenToonz .tnz (made in the GUI) under MCP control. Copies it into the sandbox
-    scenes folder if it is elsewhere. Its columns appear as 'foreign_columns' you can key/retime."""
+    scenes folder if it is elsewhere. Its columns appear as 'foreign_columns' you can key/retime.
+    A scene the MCP already manages is refused unless overwrite=true (its MCP layer data is reset)."""
     src = Path(path)
     name = _safe(name or src.stem)
+    if _state_path(name).exists():
+        if not overwrite:
+            raise ValueError(f"scene '{name}' is already managed by the MCP; use scene_context('{name}') "
+                             f"or pass overwrite=true to re-import it")
+        _snapshot(name, "reimport")
     dst = _scene_file(name)
     if src.resolve() != dst.resolve():
         if dst.exists():
@@ -758,6 +859,10 @@ def import_scene(path: str, name: str | None = None) -> dict:
 def set_scene_settings(scene: str, frames: int | None = None, fps: float | None = None,
                        bg_color: str | None = None, style: str | None = None) -> dict:
     """Change scene length (frames), fps, background colour, or default drawing style."""
+    if style and style not in styles.STYLES:
+        raise ValueError(f"style must be one of {list(styles.STYLES)}")
+    if frames is not None and frames < 1:
+        raise ValueError("frames must be >= 1")
     c = Ctx(scene, "set_scene_settings", {"frames": frames, "fps": fps, "bg": bg_color, "style": style})
     if frames:
         c.st["frames"] = int(frames)
@@ -779,15 +884,20 @@ def add_layer(scene: str, layer: str, mode: str = "vector", style: str | None = 
     mode: 'vector' (native OpenToonz vector .pli, editable in GUI, pressure lines) | 'raster' (PNG).
     style: override scene style for this layer (e.g. 'clean' for BG, 'sketch' for effects).
     parent: 'Table', a peg or another layer. boil: hand-drawn line boil on held drawings."""
+    if style and style not in styles.STYLES:
+        raise ValueError(f"style must be one of {list(styles.STYLES)}")
     c = Ctx(scene, "add_layer", {"layer": layer, "mode": mode, "style": style, "parent": parent, "boil": boil})
     name = _safe(layer)
-    if name in c.st["layers"]:
-        raise ValueError(f"layer '{name}' exists")
+    clash = [n for n in c.st["layers"] if n.lower() == name.lower()]
+    if clash:  # Windows paths are case-insensitive: 'Ball' and 'ball' would share files
+        raise ValueError(f"layer '{clash[0]}' already exists (names are case-insensitive)")
     if mode not in ("vector", "raster"):
         raise ValueError("mode must be vector or raster")
     c.st["layers"][name] = {"mode": mode, "style": style, "drawings": {}, "timing": "auto", "boil": boil,
                             "level_path": _level_path(c.st, name, mode), "dirty": False}
-    lid = c.doc.add_level(name, _level_path(c.st, name, mode), None if mode == "vector" else c.doc.dpi())
+    old = c.doc.level_by_path(_level_path(c.st, name, mode))
+    lid = old["id"] if old else c.doc.add_level(name, _level_path(c.st, name, mode),
+                                                 None if mode == "vector" else c.doc.dpi())
     ci = c.doc.add_column(lid, name)
     if parent and parent.lower() != "table":
         c.doc.set_parent(f"Col{ci + 1}", c.stage_id(parent))
@@ -818,6 +928,10 @@ def set_parent(scene: str, target: str, parent: str) -> dict:
 def set_layer(scene: str, layer: str, visible: bool | None = None, opacity: float | None = None,
               boil: bool | None = None, style: str | None = None, timing: str | None = None) -> dict:
     """Layer properties: visible, opacity (0-1, renders), boil, style (needs redraw), timing 'auto'|'manual'."""
+    if style and style not in styles.STYLES:
+        raise ValueError(f"style must be one of {list(styles.STYLES)}")
+    if timing is not None and timing not in ("auto", "manual"):
+        raise ValueError("timing must be 'auto' or 'manual'")
     c = Ctx(scene, "set_layer", {"layer": layer, "visible": visible, "opacity": opacity, "boil": boil})
     name = _safe(layer)
     L = c.layer(name)
@@ -834,6 +948,10 @@ def set_layer(scene: str, layer: str, visible: bool | None = None, opacity: floa
         L["boil"] = boil
         for did, shapes in list(L["drawings"].items()):
             _write_drawing(c, name, int(did), shapes, force=True)
+        if L.get("timing") == "manual" and ci is not None:
+            # remap the hand-set exposure to base drawings, then re-apply (or drop) the boil cycle
+            base = [(int(x.fid) % BOIL_BASE) if x and x.fid.isdigit() else 0 for x in c.doc.column_cells(ci)]
+            _apply_cells(c, name, _boil_cycle(base) if boil else base)
     _retime(c, name)
     return c.commit({"layer": name, "visible": visible, "opacity": opacity, "boil": L.get("boil")})
 
@@ -848,10 +966,16 @@ def delete_layer(scene: str, layer: str) -> dict:
     if ci is not None:
         c.doc.remove_column(ci)
     L = c.st["layers"].pop(name)
-    if L["mode"] == "vector":
-        _snapshot(c.st, "delete_pli", [_pli_file(c.st, name)])
+    lv = c.doc.level_by_path(L["level_path"])
+    if lv and not any(lv["id"] in c.doc.column_level_ids(k) for k in range(len(c.doc.columns()))):
+        c.doc.remove_level(lv["id"])
     shutil.rmtree(SVG_DIR / c.name / name, ignore_errors=True)
-    return c.commit({"deleted": name})
+    if L["mode"] == "vector":
+        _pli_file(c.st, name).unlink(missing_ok=True)
+    else:
+        for f in (PROJECT / "drawings" / c.name).glob(f"{name}.*.png"):
+            f.unlink()
+    return c.commit({"deleted": name, "undo": "undo() restores the layer and its drawings"})
 
 
 # ====================================================================== tools: drawing
@@ -868,9 +992,12 @@ def draw(scene: str, layer: str, frame: int, shapes: list[dict], force: bool = F
     interior line), trace_line=true (iro-tore coloured line), shadow=true|{light:deg,depth:px,color}
     (anime cel shadow; light 90=top, 135=top-left), human=false (perfect geometry), wobble (px).
     Colours: '#rrggbb', css names or [r,g,b,a]."""
+    _check_drawing_id(frame)
     c = Ctx(scene, "draw", {"layer": layer, "frame": frame, "n_shapes": len(shapes)})
     name = _safe(layer)
     _write_drawing(c, name, int(frame), shapes, force)
+    if int(frame) > c.st["frames"]:
+        c.warnings.append(f"drawing {frame} is after the scene end ({c.st['frames']}); extend with set_scene_settings")
     msg = _retime(c, name)
     res = {"layer": name, "drawing": int(frame)}
     if msg:
@@ -881,6 +1008,8 @@ def draw(scene: str, layer: str, frame: int, shapes: list[dict], force: bool = F
 @tool
 def draw_many(scene: str, layer: str, drawings: list[dict], force: bool = False) -> dict:
     """Batch draw: drawings=[{"frame": n, "shapes": [...]}, ...]. Use for frame-by-frame animation."""
+    for d in drawings:
+        _check_drawing_id(d.get("frame"))
     c = Ctx(scene, "draw_many", {"layer": layer, "count": len(drawings)})
     name = _safe(layer)
     for d in drawings:
@@ -902,6 +1031,10 @@ def inbetween(scene: str, layer: str, start_frame: int, end_frame: int, start_sh
     step: 1 ones, 2 twos, 3 threes (default: style timing, anime=3, feature=2).
     arc: bow of the travel path (0.15 = natural arc). squash: 0-1 stretch round shapes along motion.
     Studio rule: only auto-inbetween 'tight' moves (rotation<=30deg, scale change<=25%); add a breakdown key otherwise."""
+    _check_drawing_id(start_frame)
+    _check_drawing_id(end_frame)
+    if end_frame <= start_frame:
+        raise ValueError("end_frame must be greater than start_frame")
     c = Ctx(scene, "inbetween", {"layer": layer, "start": start_frame, "end": end_frame, "easing": easing,
                                  "step": step, "arc": arc, "squash": squash})
     name = _safe(layer)
@@ -941,18 +1074,13 @@ def set_exposure(scene: str, layer: str, cells: list[int] | str) -> dict:
             d, _, n = tok.partition("x")
             lst += [int(d)] * int(n or 1)
         cells = lst
+    cells = [int(x) % BOIL_BASE for x in cells]  # accept boil variant ids shown by older contexts
     missing = sorted({x for x in cells if x and str(x) not in L["drawings"]})
     if missing:
         raise ValueError(f"drawings not on layer: {missing}. Existing: {sorted(int(k) for k in L['drawings'])}")
     L["timing"] = "manual"
     if L.get("boil"):
-        exp = []
-        run = 0
-        for i, d in enumerate(cells):
-            run = run + 1 if i and cells[i - 1] == d else 0
-            v = (run // 2) % 3
-            exp.append(d + BOIL_BASE * v if d and v else d)
-        cells = exp
+        cells = _boil_cycle(cells)
     _apply_cells(c, name, cells)
     if len(cells) > c.st["frames"]:
         c.st["frames"] = len(cells)
@@ -971,14 +1099,17 @@ def _to_internal(tag: str, v: float, dpi: float) -> float:
 def _set_keys(c: Ctx, sid: str, tag: str, new: list[dict], replace_range: tuple[int, int] | None = None) -> None:
     """Merge keys (frame 1-based, value px/deg/scale) into a stage object param."""
     dpi = c.doc.dpi()
-    cur = c.doc.get_params(sid).get(tag, {"keys": []})["keys"]
-    nf = {k["frame"] - 1 for k in new}
-    keep = [k for k in cur if "value" in k and k["frame"] not in nf and
-            not (replace_range and replace_range[0] - 1 <= k["frame"] <= replace_range[1] - 1)]
-    merged = keep + [{"frame": k["frame"] - 1, "value": _to_internal(tag, float(k["value"]), dpi),
-                      "interp": k.get("interp", "ease"), "ease_in": k.get("ease_in", 33.0),
-                      "ease_out": k.get("ease_out", 33.0)} for k in new]
-    c.doc.set_param(sid, tag, merged)
+    for k in new:
+        if k.get("interp", "ease") not in INTERPS:
+            raise ValueError(f"interp must be one of {INTERPS}, got {k.get('interp')!r}")
+        if int(k["frame"]) < 1:
+            raise ValueError(f"key frame must be >= 1, got {k['frame']}")
+    conv = [{"frame": int(k["frame"]) - 1, "value": _to_internal(tag, float(k["value"]), dpi),
+             "interp": k.get("interp", "ease"), "ease_in": k.get("ease_in", 33.0),
+             "ease_out": k.get("ease_out", 33.0)} for k in new]
+    rr = (replace_range[0] - 1, replace_range[1] - 1) if replace_range else None
+    # node-level merge: untouched keys (GUI speed handles, expressions, step, cycle) stay byte-for-byte
+    c.doc.upsert_keys(sid, tag, conv, rr)
 
 
 @tool
@@ -1050,6 +1181,8 @@ def clear_keyframes(scene: str, target: str, param: str | None = None, start: in
                     end: int | None = None) -> dict:
     """Remove keys from a target (optionally one param: x,y,rotation,scale,scale_x,scale_y,z; optional frame range)."""
     c = Ctx(scene, "clear_keyframes", {"target": target, "param": param, "start": start, "end": end})
+    if param and param not in KEY_TAGS and param not in KEY_TAGS.values():
+        raise ValueError(f"param must be one of {list(KEY_TAGS)}")
     sid = c.stage_id(target)
     tags = [KEY_TAGS.get(param, param)] if param else list(KEY_TAGS.values())
     for tag in tags:
@@ -1057,9 +1190,7 @@ def clear_keyframes(scene: str, target: str, param: str | None = None, start: in
         if not cur:
             continue
         if start or end:
-            s0, e0 = (start or 1) - 1, (end or 10 ** 6) - 1
-            keep = [k for k in cur["keys"] if not (s0 <= k["frame"] <= e0)]
-            c.doc.set_param(sid, tag, keep, cur["default"])
+            c.doc.upsert_keys(sid, tag, [], ((start or 1) - 1, (end or 10 ** 6) - 1))
         else:
             c.doc.set_param(sid, tag, [], None)
     return c.commit({"target": sid, "cleared": tags})
@@ -1097,9 +1228,9 @@ def animate_action(scene: str, target: str, start: int, end: int, to: dict, from
         keys = [{"frame": start, "value": v0, "interp": "ease"}]
         if ant:
             keys.append({"frame": start + ant, "value": v0 - anticipation * d, "interp": "ease"})
-        if overshoot:
+        if overshoot and settle_frames >= 2:
             keys.append({"frame": end, "value": float(v_to) + overshoot * d, "interp": "ease"})
-            half = max(2, settle_frames // 2)
+            half = max(1, settle_frames // 2)
             keys.append({"frame": end + half, "value": float(v_to) - overshoot * 0.45 * d, "interp": "ease"})
             keys.append({"frame": end + settle_frames, "value": float(v_to), "interp": "ease"})
         else:
@@ -1222,10 +1353,19 @@ def compile_vectors(scene: str, force: bool = False) -> dict:
 def _prepare(scene: str) -> tuple[Ctx, dict]:
     st = _load_state(scene)
     comp = _compile(st)
+    if comp.get("failed"):
+        raise RuntimeError(f"OpenToonz could not build vector levels {comp['failed']}; nothing rendered. "
+                           f"Check the drawings on those layers (validate_scene).")
     c = Ctx(scene, "render_prepare", {}, mutate=False)
     problems = c.doc.verify(_level_file_exists)
-    if problems:
-        c.warnings += problems
+    used = set()
+    for ci in range(len(c.doc.columns())):
+        used |= c.doc.column_level_ids(ci)
+    missing = [p for p in problems if "file missing" in p and any(
+        f"'{lv['name']}'" in p for lv in c.doc.levels() if lv["id"] in used)]
+    if missing:
+        raise RuntimeError(f"cannot render, exposed levels are missing on disk: {missing}")
+    c.warnings += [p for p in problems if p not in missing]
     return c, comp
 
 
@@ -1233,7 +1373,9 @@ def _prepare(scene: str) -> tuple[Ctx, dict]:
 def preview_frame(scene: str, frame: int = 1, max_width: int = 960) -> McpImage:
     """Render one frame through OpenToonz and return the image (check your work visually)."""
     c, _ = _prepare(scene)
-    out = TMP / f"prev_{c.name}_{int(time.time() * 1000)}" / "p..png"
+    if not 1 <= frame <= c.st["frames"]:
+        raise ValueError(f"frame must be within 1..{c.st['frames']}")
+    out = TMP / f"prev_{c.name}_{uuid.uuid4().hex}" / "p..png"
     _tcomposer(c.sf, out, (frame, frame))
     f = next(out.parent.glob("p.*.png"))
     img = _flat(f, _bg(c))
@@ -1254,7 +1396,10 @@ def contact_sheet(scene: str, frames: list[int] | None = None, thumb_width: int 
     c, _ = _prepare(scene)
     n = c.st["frames"]
     frames = sorted(set(frames or [max(1, round(1 + i * (n - 1) / 5)) for i in range(6)]))
-    tmp = TMP / f"cs_{c.name}_{int(time.time() * 1000)}"
+    bad = [f for f in frames if not 1 <= f <= n]
+    if bad:
+        raise ValueError(f"frames {bad} are outside the scene (1..{n})")
+    tmp = TMP / f"cs_{c.name}_{uuid.uuid4().hex}"
     _tcomposer(c.sf, tmp / "c..png", (min(frames), max(frames)))
     W, H = c.doc.camera_res()
     th = round(thumb_width * H / W)
@@ -1282,8 +1427,12 @@ def render(scene: str, format: str = "mp4", start: int | None = None, end: int |
            shrink: int = 1) -> dict:
     """Render with OpenToonz (tcomposer), then double-check: frame count, blank frames, flashing.
     format: mp4 | gif | png (sequence). shrink 2 = half size (faster drafts)."""
+    if format not in ("mp4", "gif", "png"):
+        raise ValueError("format must be mp4, gif or png")
     c, comp = _prepare(scene)
     start, end = start or 1, end or c.st["frames"]
+    if not 1 <= start <= end <= c.st["frames"]:
+        raise ValueError(f"need 1 <= start <= end <= {c.st['frames']}")
     frames_dir = RENDER_DIR / c.name / "frames"
     shutil.rmtree(frames_dir, ignore_errors=True)
     t0 = time.time()
@@ -1295,7 +1444,7 @@ def render(scene: str, format: str = "mp4", start: int | None = None, end: int |
     issues = []
     if len(files) != end - start + 1:
         issues.append(f"expected {end - start + 1} frames, got {len(files)}")
-    issues += _check_frames(files, c.doc.fps(), _bg(c))
+    issues += _check_frames(files, c.doc.fps(), _bg(c), start)
     if format != "png":
         flat = frames_dir / "_flat"
         flat.mkdir()

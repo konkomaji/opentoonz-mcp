@@ -76,6 +76,8 @@ def fmt(v) -> str:
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
+        if v != v or v in (float("inf"), float("-inf")):
+            raise ValueError(f"non-finite number {v} cannot be written to a scene")
         if abs(v) < 1e-10:
             return "0"
         s = f"{v:.6g}"
@@ -90,7 +92,7 @@ def unquote(tok: str) -> str:
     if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
         out, i, s = [], 1, tok
         while i < len(s) - 1:
-            if s[i] == "\\" and i + 1 < len(s) - 1:
+            if s[i] == "\\" and i + 1 < len(s) - 1 and s[i + 1] in "\"\\'":
                 out.append(s[i + 1])
                 i += 2
             else:
@@ -100,7 +102,7 @@ def unquote(tok: str) -> str:
     return tok
 
 
-_ATTR = re.compile(r"""\s*([A-Za-z_][\w.\-]*)\s*=\s*("([^"]*)"|'([^']*)')""")
+_ATTR = re.compile(r"""\s*([A-Za-z_][\w.\-]*)\s*=\s*("((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""")
 
 
 def parse(text: str) -> Node:
@@ -141,8 +143,10 @@ def parse(text: str) -> Node:
                     break
                 node.attrs[am.group(1)] = am.group(3) if am.group(3) is not None else am.group(4)
                 j = am.end()
-            while text[j].isspace():
+            while j < n and text[j].isspace():
                 j += 1
+            if j >= n:
+                raise ValueError(f"unterminated tag <{node.name}> at end of file")
             stack[-1].children.append(node)
             if text.startswith("/>", j):
                 node.selfclose = True
@@ -175,7 +179,8 @@ def dump(root: Node) -> str:
 
     def w(node: Node, depth: int) -> None:
         pad = "  " * depth
-        attrs = "".join(f" {k}=\"{v}\"" if "'" in v or k != "id" else f" {k}='{v}'" for k, v in node.attrs.items())
+        attrs = "".join(f" {k}='{v}'" if k == "id" and "'" not in v else f" {k}=\"{_esc_attr(v)}\""
+                        for k, v in node.attrs.items())
         if node.selfclose and not node.children:
             out.append(f"{pad}<{node.name}{attrs}/>")
             return
@@ -201,6 +206,20 @@ def dump(root: Node) -> str:
         if isinstance(ch, Node):
             w(ch, 0)
     return "\n".join(out) + "\n"
+
+
+def _esc_attr(v: str) -> str:
+    """Escape a raw attribute value for double quotes; already-escaped sequences are kept."""
+    out, i = [], 0
+    while i < len(v):
+        ch = v[i]
+        if ch == "\\" and i + 1 < len(v):
+            out.append(v[i:i + 2])
+            i += 2
+            continue
+        out.append('\\"' if ch == '"' else ch)
+        i += 1
+    return "".join(out)
 
 
 def _inline_ref(parent: Node) -> bool:

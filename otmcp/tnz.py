@@ -11,7 +11,6 @@ Persist objects are written as <tag id='N'>...</tag> on first use and
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from xml.sax.saxutils import escape
 
 # keyframe interpolation codes (TDoubleKeyframe::saveData)
 INTERP = {"linear": "L", "constant": "C", "ease": "Ep", "speed": "S", "exp": "Exp"}
@@ -87,7 +86,7 @@ def _param(tag: str, keys: list[Key]) -> str:
             if pc == "L":
                 inner = f"<prev>{_num(k.value)}</prev>"
             elif pc == "Ep":
-                inner = f"<prev>{_num(k.value)} {_num(k.ease_in)}</prev>"
+                inner = f"<prev>{_num(k.value)} {_num(-abs(k.ease_in))}</prev>"  # OpenToonz reads -speedIn.x
             elif pc == "S":
                 inner = f"<prev>{_num(k.value)} -3 0</prev>"
         if code == "Ep":
@@ -209,6 +208,3 @@ def build(s: Scene) -> str:
     x.append("</xsheet></tnz>\n")
     return "\n".join(x)
 
-
-def escape_text(s: str) -> str:
-    return escape(s)

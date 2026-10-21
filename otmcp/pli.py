@@ -55,6 +55,10 @@ def read(path: str) -> tuple[bytearray, list[Stroke]]:
     if data[:4] != b"PLIM":
         raise ValueError("not a little-endian PLI file")
     major, minor = data[4], data[5]
+    if not (major > 5 or (major == 5 and minor >= 7)):
+        # older files store thickness differently (header maxThickness, no per-stroke byte);
+        # patching them would write to wrong offsets
+        raise ValueError(f"PLI version {major}.{minor} < 5.7 is not supported")
     off = 6
     if major > 5 or (major == 5 and minor >= 8):
         n = struct.unpack_from("<H", data, off)[0]
@@ -153,7 +157,6 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
     data, strokes = read(path)
     count = 0
     # brush profiles: map the k-th visible stroke of a frame to profiles[frame][k]
-    visible_idx: dict[int, int] = {}
     stroke_prof: dict[int, list] = {}
     mismatch: list[int] = []
     if profiles:
@@ -171,19 +174,28 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
                     stroke_prof[si] = pr
     if report is not None:
         report["profile_mismatch_frames"] = mismatch
+    k_in_frame: dict[int, int] = {}
     for si, s in enumerate(strokes):
+        # seed by (frame, index within frame) so editing one drawing never changes another's pressure
+        k = k_in_frame[s.frame] = k_in_frame.get(s.frame, -1) + 1
         if only_frames is not None and s.frame not in only_frames:
             continue
         base = [t for _, _, t in s.points]
         if max(base) <= 0:
             continue
-        rng = random.Random(seed * 7919 + si * 104729 + s.frame)
+        rng = random.Random(seed * 7919 + k * 104729 + s.frame * 15485863)
         # arc-length parameter along control points
         acc = [0.0]
         for a, b in zip(s.points, s.points[1:]):
             acc.append(acc[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
         total = acc[-1] or 1.0
-        noise = _smooth_noise(len(s.points), rng, knots=3 if s.loop else 4)
+        if s.loop:  # periodic noise: start and end are the same point, so they get the same weight
+            ph = [rng.uniform(0, 2 * math.pi) for _ in range(2)]
+            noise = [0.65 * math.sin(2 * math.pi * a / total + ph[0]) + 0.35 * math.sin(4 * math.pi * a / total + ph[1])
+                     for a in acc]
+        else:
+            noise = _smooth_noise(len(s.points), rng, knots=4)
+        ts, te = taper_start * rng.uniform(0.7, 1.3), taper_end * rng.uniform(0.7, 1.3)
         if si in stroke_prof:
             from .art import sample_profile
             for i, off in enumerate(s.thick_offsets):
@@ -195,7 +207,6 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
             if s.loop:
                 m = 1 - loop_var * (0.5 + 0.5 * noise[i])
             else:
-                ts, te = taper_start * rng.uniform(0.7, 1.3), taper_end * rng.uniform(0.7, 1.3)
                 m = 1.0
                 if u < ts:
                     m = min_ratio + (1 - min_ratio) * math.sin(u / ts * math.pi / 2)
@@ -204,5 +215,9 @@ def pressure_patch(path: str, taper_start: float = 0.18, taper_end: float = 0.28
                 m *= 1 - pressure_var * (0.5 + 0.5 * noise[i])
             data[off] = max(1, min(255, round(data[off] * m)))
         count += 1
-    open(path, "wb").write(bytes(data))
+    import os
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(bytes(data))
+    os.replace(tmp, path)
     return count

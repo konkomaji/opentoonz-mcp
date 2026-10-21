@@ -62,6 +62,8 @@ def _toward(h: float, target_deg: float, amount_deg: float) -> float:
 def shadow_color(rgba, warm: bool | None = None):
     """kage: hue 8deg toward blue (toward red for warm skin tones), sat +10%, value -18%."""
     h, s, v = _hsv(rgba)
+    if s < 0.05:  # neutral grey/white/black has no hue: give it the cool (blue) shadow, not a pink one
+        h, warm = 240 / 360, False
     if warm is None:
         warm = 0.0 <= h * 360 <= 50 and s < 0.6
     return _rgb(_toward(h, 0 if warm else 240, 8), s * 1.10 + 0.02, v * 0.82, rgba[3])

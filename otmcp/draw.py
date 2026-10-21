@@ -57,6 +57,18 @@ def ease(t: float, kind: str = "linear") -> float:
     return t
 
 
+COLOR_KEYS = {"fill", "stroke", "color", "outline"}
+
+
+def _lerp_color(a: Any, b: Any, t: float) -> Any:
+    if a is None or b is None:
+        return a if t < 0.5 else b
+    if a == b:
+        return a
+    ca, cb = color(a), color(b)
+    return [round(x + (y - x) * t) for x, y in zip(ca, cb)]
+
+
 def _lerp(a: Any, b: Any, t: float) -> Any:
     """Recursively interpolate numbers, lists, dicts and colors."""
     if isinstance(a, bool) or isinstance(b, bool):
@@ -64,19 +76,13 @@ def _lerp(a: Any, b: Any, t: float) -> Any:
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         return a + (b - a) * t
     if isinstance(a, str) and isinstance(b, str):
-        if a == b:
-            return a
-        try:
-            ca, cb = color(a), color(b)
-            return [round(_lerp(x, y, t)) for x, y in zip(ca, cb)]
-        except ValueError:
-            return a if t < 0.5 else b
+        return a if t < 0.5 else b  # plain strings (text, type, d) switch; colours are handled by key
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)) and len(a) == len(b):
         return [_lerp(x, y, t) for x, y in zip(a, b)]
     if isinstance(a, dict) and isinstance(b, dict):
         out = dict(a) if t < 0.5 else dict(b)
         for k in set(a) & set(b):
-            out[k] = _lerp(a[k], b[k], t)
+            out[k] = _lerp_color(a[k], b[k], t) if k in COLOR_KEYS else _lerp(a[k], b[k], t)
         return out
     return a if t < 0.5 else b
 
@@ -94,7 +100,7 @@ def _center(sh: dict) -> tuple[float, float] | None:
 
 def _offset(sh: dict, dx: float, dy: float) -> None:
     if "points" in sh:
-        sh["points"] = [[p[0] + dx, p[1] + dy] for p in sh["points"]]
+        sh["points"] = [[p[0] + dx, p[1] + dy] + list(p[2:]) for p in sh["points"]]  # keep brush pressure
     if "x" in sh:
         sh["x"] += dx
     if "y" in sh:
@@ -121,19 +127,30 @@ def tween_motion(shapes_a: list[dict], shapes_b: list[dict], t: float, easing: s
             e = ease(t, easing)
             bow = math.sin(math.pi * e) * arc * chord
             _offset(sh, nx * bow, ny * bow)
-        if squash and sh.get("type") in ("circle", "ellipse") and chord > 1:
+        if squash and chord > 1:
             e0, e1 = ease(max(0.0, t - dt), easing), ease(min(1.0, t + dt), easing)
-            speed = (e1 - e0) * chord / (2 * dt * max(chord, 1))  # normalised 0..~2
+            speed = (e1 - e0) / (2 * dt)  # eased progress rate; 1.0 = average speed
             lo, hi = squash_limits
-            # speed of eased progress: 1.0 = average speed; full stretch only at >=2x average
-            s = max(1.0, min(hi, 1 + squash * (hi - 1) * min(1.0, max(0.0, speed - 0.6) / 1.4)))
-            r = sh.get("r", None)
-            rx = sh.pop("rx", r if r is not None else 50)
-            ry = sh.pop("ry", r if r is not None else 50)
-            sh.pop("r", None)
-            sh["type"] = "ellipse"
-            sh["rx"], sh["ry"] = rx * s, ry / s
-            sh["rotation"] = math.degrees(math.atan2(cb[1] - ca[1], cb[0] - ca[0]))
+            # full stretch only at >= 2x average speed; none near the keys (speed ~ 0)
+            st = max(1.0, min(hi, 1 + squash * (hi - 1) * min(1.0, max(0.0, speed - 0.6) / 1.4)))
+            if st > 1.0001:
+                ang = math.atan2(cb[1] - ca[1], cb[0] - ca[0])
+                c = _center(sh)
+                is_round = sh.get("type") == "circle" or (sh.get("type") == "ellipse" and abs(
+                    float(sh.get("rx", sh.get("r", 0))) - float(sh.get("ry", sh.get("r", 0)))) < 1e-6)
+                if is_round:  # stays an editable ellipse aligned with the motion
+                    r = float(sh.pop("r", sh.get("rx", 50)))
+                    rx, ry = float(sh.pop("rx", r)), float(sh.pop("ry", r))
+                    sh.update(type="ellipse", rx=rx * st, ry=ry / st, rotation=math.degrees(ang))
+                elif c:
+                    # exact area-preserving stretch (sx*sy = 1) along the direction of travel, any shape
+                    from .art import compose, transform_shape
+                    ca_, sa_ = math.cos(ang), math.sin(ang)
+                    R = (ca_, sa_, -sa_, ca_, 0, 0)
+                    Ri = (ca_, -sa_, sa_, ca_, 0, 0)
+                    m = compose((1, 0, 0, 1, c[0], c[1]), compose(R, compose((st, 0, 0, 1 / st, 0, 0),
+                                                              compose(Ri, (1, 0, 0, 1, -c[0], -c[1])))))
+                    out[i] = transform_shape(sh, m)
     return out
 
 

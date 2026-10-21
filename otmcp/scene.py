@@ -25,6 +25,11 @@ def file_hash(path) -> str | None:
         return None
 
 
+def _qpath(path: str) -> str:
+    """TFilePath token: always quoted, backslash and quote escaped."""
+    return '"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 @dataclass
 class Cell:
     level_id: str
@@ -52,7 +57,7 @@ class SceneDoc:
         return T.dump(self.root)
 
     def save(self, path) -> None:
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
+        with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as f:
             f.write(self.text())
 
     # ---------------------------------------------------------------- sections
@@ -72,18 +77,32 @@ class SceneDoc:
         return T.max_id(self.root) + 1
 
     # ---------------------------------------------------------------- properties
+    def _active_cam_props(self) -> Node | None:
+        cams = self.props.child("cameras").nodes("camera")
+        if not cams:
+            return None
+        k = 0
+        for p in self.pegbars():
+            pid = p.attrs.get("id", "")
+            if pid.startswith("Camera") and pid[6:].isdigit() and (
+                    p.attrs.get("activeboth") == "yes" or p.attrs.get("active") == "yes"):
+                k = int(pid[6:]) - 1
+        return cams[k] if k < len(cams) else cams[0]
+
     def camera_res(self) -> tuple[int, int]:
-        cam = self.props.path("cameras", "camera", "cameraRes")
-        if cam is None:
+        cam = self._active_cam_props()
+        n = cam.find("cameraRes") if cam is not None else None
+        if n is None:
             return 1920, 1080
-        a = cam.tokens()
+        a = n.tokens()
         return int(float(a[0])), int(float(a[1]))
 
     def camera_size(self) -> tuple[float, float]:
-        cam = self.props.path("cameras", "camera", "cameraSize")
-        if cam is None:
+        cam = self._active_cam_props()
+        n = cam.find("cameraSize") if cam is not None else None
+        if n is None:
             return 16.0, 9.0
-        a = cam.tokens()
+        a = n.tokens()
         return float(a[0]), float(a[1])
 
     def dpi(self) -> float:
@@ -148,9 +167,7 @@ class SceneDoc:
         n.children.append(T.fmt(name))
         attrs = {"dpix": f"{dpi:.6f}", "dpiy": f"{dpi:.6f}"} if dpi else {"dpiType": "image"}
         n.children.append(Node("info", attrs, selfclose=True))
-        n.children.append(Node("path", children=[T.fmt(path) if not path.startswith('"') else path]))
-        # paths always quoted (contain / and .)
-        n.children[-1].children = ['"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"']
+        n.children.append(Node("path", children=[_qpath(path)]))
         self._levels_node().children.append(n)
         folder = None
         for f in self.tnz.child("levelSet").nodes("folder"):
@@ -163,7 +180,7 @@ class SceneDoc:
     def set_level_path(self, lid: str, path: str) -> None:
         for lv in self.levels():
             if lv["id"] == lid:
-                lv["node"].child("path").children = ['"' + path.replace("\\", "\\\\") + '"']
+                lv["node"].child("path").children = [_qpath(path)]
 
     # ---------------------------------------------------------------- columns
     def columns(self) -> list[Node]:
@@ -275,7 +292,12 @@ class SceneDoc:
         cols = self.xsheet.child("columns")
         col = cols.nodes()[ci]
         fx = col.find("fx")
-        fid = fx.nodes()[0].attrs.get("id") if fx is not None and fx.nodes() else None
+        if fx is not None and fx.nodes():
+            fxnode = fx.nodes()[0]
+        else:  # zerary fx column: the fx node is a direct child
+            fxnode = next((c for c in col.nodes() if c.name not in
+                           ("status", "cells", "camerastand_opacity", "filter_color_id")), None)
+        fid = fxnode.attrs.get("id") if fxnode is not None else None
         cols.remove(col)
         fxn = self.xsheet.child("fxnodes")
         # drop terminal reference; fx that took this column as input keep a dangling port -> clear it
@@ -283,7 +305,7 @@ class SceneDoc:
             for ch in list(n.children):
                 if isinstance(ch, Node) and ch.name == "fxnode" and ch.nodes() and ch.nodes()[0].attrs.get("id") == fid:
                     n.remove(ch)
-                if isinstance(ch, Node) and ch.name == "Toonz_columnFx" and ch.attrs.get("id") == fid and ch.selfclose:
+                if isinstance(ch, Node) and ch.attrs.get("id") == fid and ch.selfclose and fid:
                     n.remove(ch)
         # stage objects: drop ColN, renumber later ones and parent refs
         pegs = self.xsheet.child("pegbars")
@@ -354,7 +376,13 @@ class SceneDoc:
         """Rotation/scale pivot in inches (camera-centred, +y up) without moving the object:
         placement = T(offset+pos) R S T(-center), so offset = center keeps it in place."""
         p = self.pegbar(sid, create=True)
-        p.child("center", before="status").set_tokens(float(cx), float(cy), -float(cx), -float(cy))
+        n = p.find("center")
+        t = [float(v) for v in n.tokens()] if n is not None else []
+        cx0, cy0, nox, noy = (t + [0.0, 0.0, 0.0, 0.0])[:4]  # stored: center, -offset
+        # moving the center by d needs the same offset change d to keep the object still (exact at
+        # identity rotation/scale, the same rule the OpenToonz GUI applies)
+        ox, oy = -nox + (float(cx) - cx0), -noy + (float(cy) - cy0)
+        p.child("center", before="status").set_tokens(float(cx), float(cy), -ox, -oy)
 
     def pivot(self, sid: str) -> tuple[float, float]:
         p = self.pegbar(sid)
@@ -389,6 +417,7 @@ class SceneDoc:
             d = n.find("default")
             info = {"default": float(d.tokens()[0]) if d is not None and d.tokens() else 0.0, "keys": []}
             ks = n.find("keyframes")
+            prev_code = None
             for k in (ks.nodes() if ks is not None else []):
                 t = k.tokens()
                 if len(t) < 2:
@@ -404,7 +433,8 @@ class SceneDoc:
                 if prev is not None and len(prev.tokens()) > 1:
                     key["speed_in"] = (float(prev.tokens()[1]),
                                        float(prev.tokens()[2]) if len(prev.tokens()) > 2 else 0.0)
-                    key["ease_in"] = abs(key["speed_in"][0])
+                    if prev_code in ("E", "Ep"):
+                        key["ease_in"] = abs(key["speed_in"][0])
                 if k.name == "S" and len(t) > 3:
                     key["speed_out"] = (float(t[2]), float(t[3]))
                 elif k.name in ("Ep", "E") and len(t) > 2:
@@ -412,6 +442,7 @@ class SceneDoc:
                 key["type"] = k.name
                 if k.attrs.get("step"):
                     key["step"] = int(k.attrs["step"])
+                prev_code = k.name
                 out_params = info["keys"]
                 out_params.append(key)
             out[tag] = info
@@ -429,12 +460,16 @@ class SceneDoc:
         if default is None:
             default = keys[0]["value"] if keys else (1.0 if tag in ("sx", "sy", "sc") else 0.0)
         n = Node(tag, children=[Node("default", children=[T.fmt(float(default))])])
+        if old is not None:  # keep <cycle> and anything else OpenToonz stores beside the keys
+            n.children += [c for c in old.nodes() if c.name not in ("default", "keyframes")]
         if keys:
             kn = Node("keyframes")
             prev = None
             for k in keys:
                 code = INTERP_CODE.get(k.get("interp", "linear"), "L")
                 kid = Node(code)
+                if int(k.get("step", 1) or 1) > 1:
+                    kid.attrs["step"] = str(int(k["step"]))
                 if prev is not None:
                     pc = INTERP_CODE.get(prev.get("interp", "linear"), "L")
                     if pc == "L":
@@ -446,12 +481,15 @@ class SceneDoc:
                         ein = abs(float(k.get("ease_in", 33.0 if pc == "Ep" else 3)))
                         kid.children.append(Node("prev", children=[T.fmt(float(k["value"])), T.fmt(-ein)]))
                     elif pc == "S":
-                        kid.children.append(Node("prev", children=[T.fmt(float(k["value"])), "-3", "0"]))
+                        si = k.get("speed_in", (-3.0, 0.0))
+                        kid.children.append(Node("prev", children=[T.fmt(float(k["value"])), T.fmt(float(si[0])),
+                                                                   T.fmt(float(si[1]))]))
                 body = [str(int(k["frame"])), T.fmt(float(k["value"]))]
                 if code in ("Ep", "E"):
                     body.append(T.fmt(float(k.get("ease_out", 33.0 if code == "Ep" else 3))))
                 elif code == "S":
-                    body += ["3", "0"]
+                    so = k.get("speed_out", (3.0, 0.0))
+                    body += [T.fmt(float(so[0])), T.fmt(float(so[1]))]
                 kid.children += body
                 kn.children.append(kid)
                 prev = k
@@ -466,6 +504,65 @@ class SceneDoc:
                     idx = i
                     break
             p.children.insert(idx, n)
+
+    def upsert_keys(self, sid: str, tag: str, new: list[dict], remove_range: tuple[int, int] | None = None) -> None:
+        """Insert/replace keys at their frames (0-based) while keeping every other existing key node
+        byte-for-byte (GUI speed handles, expressions, step, unknown types survive).
+        remove_range: also drop existing keys with remove_range[0] <= frame <= remove_range[1]."""
+        p = self.pegbar(sid, create=True)
+        old = p.find(tag)
+        if old is None:
+            self.set_param(sid, tag, new)
+            return
+        ks = old.find("keyframes")
+        existing = []
+        for kn in (ks.nodes() if ks is not None else []):
+            toks = kn.tokens()
+            try:
+                fr = int(float(toks[0]))
+            except (IndexError, ValueError):
+                continue
+            existing.append((fr, kn))
+        nf = {int(k["frame"]) for k in new}
+        keep = [(f, n) for f, n in existing if f not in nf and
+                not (remove_range and remove_range[0] <= f <= remove_range[1])]
+        # build nodes for the new keys using the normal writer, then splice
+        merged_new = sorted(new, key=lambda k: k["frame"])
+        new_nodes = []
+        if merged_new:
+            tmp = SceneDoc.new(tnz.Scene(frames=1))
+            tmp.set_param("Col1", tag, merged_new)
+            new_nodes = [(int(float(n.tokens()[0])), n)
+                         for n in tmp.pegbar("Col1").find(tag).find("keyframes").nodes()]
+        new_info = {id(n): k for (_, n), k in zip(new_nodes, merged_new)}
+        allk = sorted(keep + new_nodes, key=lambda x: x[0])
+        # a new key's incoming handle depends on its REAL predecessor (which may be an existing key)
+        for i in range(1, len(allk)):
+            node = allk[i][1]
+            if id(node) not in new_info:
+                continue
+            k = new_info[id(node)]
+            pc = allk[i - 1][1].name
+            node.children = [c for c in node.children if not (isinstance(c, Node) and c.name == "prev")]
+            if pc in ("Ep", "E"):
+                ein = abs(float(k.get("ease_in", 33.0 if pc == "Ep" else 3)))
+                node.children.insert(0, Node("prev", children=[T.fmt(float(k["value"])), T.fmt(-ein)]))
+            elif pc == "S":
+                node.children.insert(0, Node("prev", children=[T.fmt(float(k["value"])), "-3", "0"]))
+            elif pc == "L":
+                node.children.insert(0, Node("prev", children=[T.fmt(float(k["value"]))]))
+        if ks is None:
+            ks = Node("keyframes")
+            old.children.append(ks)
+        ks.children = [n for _, n in allk]
+
+    def remove_level(self, lid: str) -> None:
+        """Remove a level definition and its cast-folder references (cells must not use it)."""
+        ls = self.tnz.child("levelSet")
+        for n in list(ls.walk()):
+            for ch in list(n.children):
+                if isinstance(ch, Node) and ch.name == "level" and ch.attrs.get("id") == lid:
+                    n.remove(ch)
 
     # ---------------------------------------------------------------- integrity
     def frame_count(self) -> int:
