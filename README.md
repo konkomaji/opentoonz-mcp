@@ -45,6 +45,7 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 | ✍️ **A hand-drawn look** | Pen-pressure taper. Subtle line wobble that holds still on held frames. Optional line boil. Anime cel shadows and coloured trace lines. Style presets: `anime`, `feature`, `cartoon`, `sketch`, `clean`. |
 | 🎞️ **Animator timing** | In-betweens with slow-in/slow-out, arcs and squash and stretch that keeps the area constant. Xsheet exposure on ones, twos or threes. Blinks and lip sync from text. |
 | 🦘 **Principles built in** | `animate_action` adds anticipation, overshoot and settle using classic proportions. Physics tools do gravity-exact bounces (with material presets), recipe jumps, and spring-based follow-through for hair, tails and cloth. |
+| 🧍 **Real human bodies that walk and run** | `build_character` makes a side-view cut-out rig for any age and sex (toddler, girl, boy, teen, woman, man, old woman, old man) from published body measurements. `walk_cycle` and `run_cycle` animate it from gait studies: planted feet that roll heel to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in the air. Each call reports cadence, step length, knee angles and foot slip so you can check the motion. |
 | 🎥 **Camera work** | Pans with parallax layers, exponential trucks, impact and trauma shake, and a smoothed camera follow. It warns before a move reveals empty background or pans fast enough to strobe. |
 | 🖼️ **Bring your own art** | Import SVG files as editable shapes. Place images, or let OpenToonz's own vectorizer trace them into vector levels. Build a reusable **parts library** (model sheets with variants such as mouth charts). |
 | 🔁 **Works with your hand edits** | The scene file is the source of truth. Retime or redraw in OpenToonz, save, and the assistant picks up your changes instead of overwriting them. |
@@ -117,6 +118,8 @@ Ask the assistant to run `opentoonz_info` first. It reports what it found and an
 
 > Import my sketch `C:\art\pose.png` on a traced layer with centerline tracing, then in-between it to the next key on twos.
 
+> Build an old woman and a seven-year-old girl, and have them walk across the frame together.
+
 > Open the scene in OpenToonz. I'll fix the arm on frame 12. … Done: carry on from frame 13.
 
 A good session looks like a studio pipeline:
@@ -126,11 +129,11 @@ A good session looks like a studio pipeline:
 3. `add_note` (story)
 4. Layout: layers, pegs and camera
 5. Key drawings, then `inbetween` and timing
-6. `set_pivot`, then keys, `animate_action` and physics
+6. `set_pivot`, then keys, `animate_action` and physics (or `build_character` and `walk_cycle` for people)
 7. `camera_move`
 8. `validate_scene`, `contact_sheet`, `render`
 
-The full list of 44 tools with every parameter is in **[docs/TOOLS.md](docs/TOOLS.md)**.
+The full list of 48 tools with every parameter is in **[docs/TOOLS.md](docs/TOOLS.md)**.
 
 ## How it works
 

@@ -7,6 +7,12 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Added
+
+- `anatomy_reference` gives body proportions for any age and sex: heads tall, joint heights, segment lengths, widths and depths, mass split and centre of mass. The numbers come from Drillis-Contini, de Leva (1996) and CDC/NHANES stature.
+- `build_character` builds a 16-part side-view cut-out rig with real proportions, parented like a skeleton with every pivot on its joint. It covers toddlers to old age, has a few hair styles, and can face left or right.
+- `walk_cycle` and `run_cycle` animate those rigs from gait research. Timing by age and sex, planted feet that roll heel to ball to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in flight. Each call checks itself: it reports cadence, step length, vertical bounce, knee flexion and foot slip measured from the baked keys.
+
 ### Changed
 
 - The README badges now read the version and Python range from `pyproject.toml`, and the install steps use the GitHub URL until I publish to PyPI.

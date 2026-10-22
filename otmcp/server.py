@@ -37,7 +37,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp import Image as McpImage
 
-from . import assets, config, curve, learn, physics, pli, tnz, vec
+from . import anatomy, assets, config, curve, gait, learn, physics, pli, tnz, vec
 from . import draw as drawlib
 from . import style as styles
 from .scene import Cell, SceneDoc, file_hash
@@ -1766,6 +1766,225 @@ def lip_sync(scene: str, layer: str, text: str, start: int, part: str, x: float,
     if end > c.st["frames"]:
         c.st["frames"] = end
     return c.commit({"layer": name, "frames": [start, end], "shapes": {v: ids[v] for v in need}})
+
+
+# ====================================================================== tools: anatomy / character rigs
+@tool
+def anatomy_reference(person: str | None = None, age: float | str | None = None, sex: str | None = None,
+                      height_px: float | None = None, px_per_m: float = 340.0) -> dict:
+    """Body proportions for drawing a person, from anthropometric data (Drillis-Contini segment
+    lengths, de Leva masses, CDC/NHANES stature, growth-standard head ratios).
+    person: baby | toddler | boy | girl | child | teen | teen_boy | teen_girl | young_man | young_woman |
+    man | woman | old_man | old_woman (or give age years / label and sex). Returns heights from the floor,
+    segment lengths, front widths, side depths (px), heads tall, mass fractions, centre of mass, notes.
+    Scale: height_px, or px_per_m (340 = 1.75 m adult about 600 px; keep one px_per_m per scene)."""
+    return anatomy.reference(age, sex, person, px_per_m=px_per_m, height_px=height_px)
+
+
+@tool
+def build_character(scene: str, name: str, person: str | None = None, age: float | str | None = None,
+                    sex: str | None = None, x: float | None = None, ground_y: float | None = None,
+                    px_per_m: float = 340.0, facing: str = "right", hair: str = "short",
+                    colors: dict | None = None, style: str | None = None) -> dict:
+    """Build a side-view cut-out character rig with real proportions for the age and sex.
+    Creates a root peg '<name>' at the hips and 16 vector layers '<name>_<part>' (torso, head, upper arm,
+    forearm, hand, thigh, shin, foot, toe; far side darker and behind), parented like a skeleton with
+    each pivot on its joint. Animate it with walk_cycle / run_cycle, or key the parts directly
+    (rotation on a part turns it about its joint). x: hip x px (default centre); ground_y: floor line px
+    (default 90% of the frame). hair: short | long | bob | ponytail | bun | none.
+    colors: {skin, hair, top, bottom, shoes, line}. Every layer stays an editable OpenToonz vector level."""
+    if facing not in ("right", "left"):
+        raise ValueError("facing must be right or left")
+    if hair not in ("short", "long", "bob", "ponytail", "bun", "none"):
+        raise ValueError("hair must be short, long, bob, ponytail, bun or none")
+    if style and style not in styles.STYLES:
+        raise ValueError(f"style must be one of {list(styles.STYLES)}")
+    if px_per_m <= 0:
+        raise ValueError("px_per_m must be > 0")
+    pr = anatomy.proportions(age, sex, person)
+    c = Ctx(scene, "build_character", {"name": name, "person": person, "age": pr["age"], "sex": pr["sex"],
+                                       "facing": facing})
+    rig = _safe(name)
+    rigs = c.st.setdefault("rigs", {})
+    if rig.lower() in (r.lower() for r in rigs):
+        raise ValueError(f"character '{rig}' already exists")
+    W, H = c.doc.camera_res()
+    dpi = c.doc.dpi()
+    hpx = pr["stature_m"] * px_per_m
+    x0 = float(x if x is not None else W / 2)
+    gy = float(ground_y if ground_y is not None else 0.9 * H)
+    if hpx > gy:
+        c.warnings.append(f"the character ({hpx:.0f} px tall) does not fit above ground_y={gy:.0f}; "
+                          f"lower px_per_m or move the ground down")
+    joints = anatomy.rest_joints(pr, hpx, x0, gy)
+    shapes = anatomy.part_shapes(pr, joints, hpx, colors, hair)
+    if facing == "left":
+        shapes = {k: anatomy.mirror_shapes(v, x0) for k, v in shapes.items()}
+
+    def jpos(j):
+        px, py = joints[j]
+        return (2 * x0 - px if facing == "left" else px), py
+
+    layers = {}
+    for part in anatomy.PARTS:  # back to front: later columns draw on top
+        lname = f"{rig}_{part}"
+        if any(n.lower() == lname.lower() for n in c.st["layers"]):
+            raise ValueError(f"layer '{lname}' already exists")
+        c.st["layers"][lname] = {"mode": "vector", "style": style, "drawings": {}, "timing": "auto", "boil": False,
+                                 "level_path": _level_path(c.st, lname, "vector"), "dirty": False}
+        old = c.doc.level_by_path(_level_path(c.st, lname, "vector"))
+        lid = old["id"] if old else c.doc.add_level(lname, _level_path(c.st, lname, "vector"), None)
+        layers[part] = f"Col{c.doc.add_column(lid, lname) + 1}"
+    root = c.doc.add_peg(rig, "Table")
+    hx, hy = jpos("hip")
+    c.doc.set_pivot(root, (hx - W / 2) / dpi, -(hy - H / 2) / dpi)
+    for part, (parent, joint) in anatomy.RIG_PARENTS.items():
+        sid = layers[part]
+        c.doc.set_parent(sid, root if parent == "root" else layers[parent])
+        px, py = jpos(joint)
+        c.doc.set_pivot(sid, (px - W / 2) / dpi, -(py - H / 2) / dpi)
+    for part in anatomy.PARTS:
+        lname = f"{rig}_{part}"
+        _write_drawing(c, lname, 1, shapes[part])
+        _retime(c, lname)
+    rigs[rig] = {"age": pr["age"], "sex": pr["sex"], "px_per_m": px_per_m, "height_px": hpx, "facing": facing,
+                 "x": x0, "ground_y": gy, "root": rig, "joints": {k: list(v) for k, v in joints.items()},
+                 "parts": {p: f"{rig}_{p}" for p in anatomy.PARTS}}
+    ref = anatomy.reference(pr["age"], pr["sex"], height_px=hpx)
+    return c.commit({"character": rig, "root_peg": root, "layers": [f"{rig}_{p}" for p in anatomy.PARTS],
+                     "height_px": round(hpx, 1), "heads_tall": ref["heads_tall"], "stature_m": ref["stature_m"],
+                     "age": pr["age"], "sex": ref["sex"], "notes": ref["notes"]})
+
+
+def _rig(c: Ctx, character: str) -> dict:
+    rigs = c.st.get("rigs", {})
+    for k, v in rigs.items():
+        if k.lower() == _safe(character).lower():
+            return v
+    raise ValueError(f"character '{character}' not found. Characters: {list(rigs)}")
+
+
+def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | None, cycles: float | None,
+               speed: float | None, cadence: float | None, travel: bool, on: int, bounce: float,
+               arm_swing: float, lean: float, phase: float) -> dict:
+    if on not in (1, 2):
+        raise ValueError("on must be 1 (ones) or 2 (twos)")
+    if start < 1:
+        raise ValueError("start must be >= 1")
+    if speed is not None and speed <= 0 or cadence is not None and cadence <= 0:
+        raise ValueError("speed and cadence must be > 0")
+    c = Ctx(scene, f"{kind}_cycle", {"character": character, "start": start, "end": end, "cycles": cycles,
+                                     "speed": speed, "cadence": cadence, "travel": travel, "on": on})
+    rg = _rig(c, character)
+    n = gait.norms(kind, rg["age"], rg["sex"])
+    if speed is not None:
+        if cadence is None:  # step length and cadence both grow with speed (about as its square root)
+            n["cadence"] *= (speed / n["speed"]) ** 0.5
+        n["speed"] = float(speed)
+    if cadence is not None:
+        n["cadence"] = float(cadence)
+    fps = c.doc.fps()
+    T = 2 * 60.0 / n["cadence"] * fps
+    if end is None:
+        end = start + max(1, round((cycles or 2) * T)) - 1
+    if end <= start:
+        raise ValueError("end must be after start")
+    frames = end - start + 1
+    joints = {k: tuple(v) for k, v in rg["joints"].items()}
+    res = gait.cycle(kind, joints, n, rg["height_px"], rg["px_per_m"], fps, rg["ground_y"], frames,
+                     travel=travel, bounce=bounce, arm_swing=arm_swing, lean_add=lean, phase=phase)
+    flip = -1.0 if rg["facing"] == "left" else 1.0
+    root = c.stage_id(rg["root"])
+    cols = {p: c.stage_id(lname) for p, lname in rg["parts"].items()}
+    step = on
+    keyed = [i for i in range(0, frames, step)]
+
+    def write(sid, tag, vals, tol):
+        if step == 1:
+            return _bake(c, sid, tag, [(start + i, vals[i]) for i in range(frames)], tol)
+        _set_keys(c, sid, tag, [{"frame": start + i, "value": vals[i], "interp": "constant"} for i in keyed],
+                  replace_range=(start, end))
+        return len(keyed)
+
+    bx = _param_series(c, root, "x", start, start)[0]
+    by = _param_series(c, root, "y", start, start)[0]
+    nkeys = write(root, "x", [bx + flip * f["root"][0] for f in res["frames"]], 0.25)
+    nkeys += write(root, "y", [by + f["root"][1] for f in res["frames"]], 0.25)
+    for part, sid in cols.items():
+        nkeys += write(sid, "rot", [flip * f["angles"][part] for f in res["frames"]], 0.05)
+    # double check: forward kinematics from the keys OpenToonz will actually evaluate
+    rep = res["report"]
+    pan = rep["background_pan_px_per_frame"]
+    rep["baked_slip_px"] = _baked_slip(c, rg, res, cols, root, start, end, flip, bx, by, pan) if step == 1 else None
+    if end > c.st["frames"]:
+        c.warnings.append(f"the {kind} runs to frame {end}, past the scene end {c.st['frames']}; "
+                          f"extend with set_scene_settings")
+    if not rep["legs_reached"]:
+        c.warnings.append("a leg could not reach its foot target on some frames; lower speed or raise cadence")
+    if not travel:
+        c.warnings.append(f"walking in place: pan the background {rep['background_pan_px_per_frame']} px/frame "
+                          f"{'left' if flip > 0 else 'right'} (camera_move or keys on the BG peg)")
+    rep["frames_baked"] = rep.pop("frames")
+    return c.commit({**rep, "character": rg["root"], "frames": [start, end], "keys": nkeys, "on": on})
+
+
+def _baked_slip(c, rg, res, cols, root, start, end, flip, bx, by, pan=0.0) -> float:
+    """Largest movement (px) of a planted foot point, from the baked keys (in place: relative to the
+    background moving at `pan` px/frame)."""
+    j = {k: tuple(v) for k, v in rg["joints"].items()}
+    l1, l2 = math.dist(j["hip"], j["knee"]), math.dist(j["knee"], j["ankle"])
+    ser = {p: _param_series(c, cols[p], "rot", start, end) for p in cols}
+    rx = _param_series(c, root, "x", start, end)
+    ry = _param_series(c, root, "y", start, end)
+    foot = gait.Foot(*[(j[k][0] - j["ankle"][0], j[k][1] - j["ankle"][1]) for k in ("heel", "ball", "toe")])
+    worst = 0.0
+    for side in ("near", "far"):
+        prev = None
+        for i, f in enumerate(res["frames"]):
+            hip = (j["hip"][0] + flip * (rx[i] - bx + pan * i), j["hip"][1] + (ry[i] - by))
+            th = flip * ser[f"leg_{side}_thigh"][i]
+            sh = th + flip * ser[f"leg_{side}_shin"][i]
+            pt = sh + flip * ser[f"leg_{side}_foot"][i]
+            knee = (hip[0] + gait._rot((0.0, l1), th)[0], hip[1] + gait._rot((0.0, l1), th)[1])
+            ank = (knee[0] + gait._rot((0.0, l2), sh)[0], knee[1] + gait._rot((0.0, l2), sh)[1])
+            planted = f["world"].get(f"{side}_planted")
+            if planted:
+                piv = foot.point(planted, ank, pt) if planted != "toe_tip" else foot.toe_tip(
+                    ank, pt, pt + flip * ser[f"leg_{side}_toe"][i])
+                if prev and prev[0] == f["world"][f"{side}_step"] and prev[1] == planted:
+                    worst = max(worst, math.dist(piv, prev[2]))
+                prev = (f["world"][f"{side}_step"], planted, piv)
+            else:
+                prev = None
+    return round(worst, 3)
+
+
+@tool
+def walk_cycle(scene: str, character: str, start: int = 1, end: int | None = None, cycles: float | None = None,
+               speed: float | None = None, cadence: float | None = None, travel: bool = True, on: int = 1,
+               bounce: float = 1.0, arm_swing: float = 1.0, lean: float = 0.0, phase: float = 0.0) -> dict:
+    """Walk a build_character rig with biomechanically correct timing for its age and sex.
+    Feet stay planted and roll heel -> flat -> ball -> toe; legs use two-bone IK; the hips ride an
+    inverted-pendulum arc (low at contact, high at passing); arms swing opposite the legs.
+    Defaults come from gait studies (e.g. adult man 108 steps/min at 1.4 m/s; toddler 154 at 0.86;
+    old age shorter steps). speed m/s, cadence steps/min override them. cycles (default 2) or end.
+    travel=false walks in place (pan the BG). on=2 holds every pose 2 frames (keys become constant).
+    bounce, arm_swing scale the motion (1 = natural; >1 = cartoon); lean adds forward trunk lean (deg).
+    Returns the self-check: cadence, step length, vertical oscillation, knee flexion, foot slip."""
+    return _gait_tool(scene, character, "walk", start, end, cycles, speed, cadence, travel, on, bounce,
+                      arm_swing, lean, phase)
+
+
+@tool
+def run_cycle(scene: str, character: str, start: int = 1, end: int | None = None, cycles: float | None = None,
+              speed: float | None = None, cadence: float | None = None, travel: bool = True, on: int = 1,
+              bounce: float = 1.0, arm_swing: float = 1.0, lean: float = 0.0, phase: float = 0.0) -> dict:
+    """Run a build_character rig: spring-mass physics (exact gravity in the flight phase, a spring arc
+    in contact, lowest at mid-stance), planted feet, high knee recovery, bent arms. Defaults by age and
+    sex from jogging norms (adult man about 166 steps/min at 3.3 m/s). Same options as walk_cycle;
+    bounce=1 keeps gravity exact."""
+    return _gait_tool(scene, character, "run", start, end, cycles, speed, cadence, travel, on, bounce,
+                      arm_swing, lean, phase)
 
 
 @tool

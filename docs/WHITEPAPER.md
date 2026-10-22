@@ -16,7 +16,7 @@ Five ideas make it work:
 4. **Transactional safety.** Snapshots, rollback, locking and verification.
 5. **Studio practice and physics as parameters.** Not prose guidance.
 
-The system has 44 tools and 108 automated tests, 31 of which render through the installed OpenToonz.
+The system has 48 tools and 130 automated tests, 32 of which render through the installed OpenToonz.
 
 ## 1. Problem
 
@@ -102,7 +102,28 @@ Physics-based motion is sampled per frame and baked as the fewest linear keys th
 - **Follow-through** uses a second-order system (`y + k₁y' + k₂y'' = x + k₃x'`, parameterised by frequency, damping ratio and response). The overshoot matches the analytic `exp(−ζπ/√(1−ζ²))` within 3 percentage points in tests.
 - **Camera follow** uses critically damped smoothing. **Trauma shake** uses `amplitude = trauma²` with deterministic gradient noise.
 
-## 6. Studio practice as parameters
+## 6. People: anatomy and gait
+
+I wanted human motion that holds up to a physiotherapist's eye, not just an animator's. Two modules carry it.
+
+- **Anatomy** (`anatomy.py`). Segment lengths and joint heights come from Drillis and Contini (as tabulated by Winter). Segment masses and centres of mass come from de Leva (1996), with separate male and female tables. Stature by age comes from the CDC growth charts and NHANES, head height per stature and sitting-height ratio from growth standards, and the child head mass from Jensen. For an adult the shoulder sits at 0.818 H, the hip at 0.530 H and the knee at 0.285 H, and the whole-body centre of mass lands at 0.56 H. A toddler is about 5 heads tall and an adult 7.6; legs grow fastest in the pubertal spurt, and old age adds height loss and a forward head. Child mass splits are an approximation (about ±15%).
+- **Rig.** `build_character` turns those numbers into 16 vector layers parented like a skeleton, each pivot on its joint. I verified by render that OpenToonz composes the hierarchy as world = parent · T(offset)·R·S·T(−centre).
+- **Gait** (`gait.py`). Timing comes from gait studies by age and sex (Sutherland for children, Bohannon and Andrews for adults by decade, jogging norms for running). The stance foot is planted in world space and rolls over Perry's rockers: heel, ankle, forefoot, then toe. When the hip moves out of reach, the heel rises just enough. Legs are solved by analytic two-bone IK.
+  - **Walk.** The hip rides the highest arc the loaded legs allow, as an inverted pendulum: low at double support, high at mid-stance.
+  - **Run.** A spring-mass model: an exact gravity parabola in flight, and a linear-spring arc in contact that matches position, velocity and acceleration (−g) at take-off.
+- **Self-check.** Each call reports cadence, step length, vertical oscillation, knee flexion and foot slip. The slip is measured again by forward kinematics from the keys OpenToonz will actually evaluate.
+
+| Check (adult man unless noted) | Model | Literature |
+|---|---|---|
+| Walk cadence, step length | 108 steps/min, 0.78 m | 105–115, 0.7–0.8 m |
+| Walk pelvis vertical oscillation | 5.7 cm | about 4–6 cm |
+| Peak knee flexion in swing: adult, older woman, child | 64°, 58°, 66° | 60–65°, 55–60°, 65–70° |
+| Knee at toe-off | 40° | 35–40° |
+| Run vertical oscillation, swing knee | 6.4 cm, 100° | 6–10 cm, 90–105° |
+| Run flight acceleration | exactly g | g |
+| Planted-foot slip after baking keys | < 0.5 px | 0 |
+
+## 7. Studio practice as parameters
 
 Classic 2D practice is encoded as defaults the tools apply and validate against, not as text the assistant must remember:
 
@@ -115,7 +136,7 @@ Classic 2D practice is encoded as defaults the tools apply and validate against,
 
 Each render is reviewed automatically: frame count, blank frames, single-frame pops, dead holds and photosensitive flashing.
 
-## 7. Safety and trust
+## 8. Safety and trust
 
 An assistant that edits a production file must never be the reason work is lost.
 
@@ -125,7 +146,7 @@ An assistant that edits a production file must never be the reason work is lost.
 - **Verified writes.** Every write is serialised to a temp file, re-parsed and structurally verified, and only then atomically replaces the scene.
 - **Journal.** Every action and every detected outside change is logged.
 
-## 8. Context and learning
+## 9. Context and learning
 
 `scene_context` gives the assistant a complete, current picture of the scene:
 
@@ -136,18 +157,18 @@ An assistant that edits a production file must never be the reason work is lost.
 
 Lessons accumulate across sessions from tool errors, verification problems, render reviews, the assistant's own recorded insights and the user's ratings. They are ranked by kind and recurrence. When feedback implies a default should change, `tune_style` makes it permanent for every later drawing.
 
-## 9. Evaluation
+## 10. Evaluation
 
 | Check | Result |
 |---|---|
-| Unit and regression tests | 108 tests passing (31 render through OpenToonz 1.8.0) |
+| Unit and regression tests | 130 tests passing (32 render through OpenToonz 1.8.0) |
 | Keyframe evaluator vs `tcomposer` | ≤ 1.5 px on every frame (ease → speed → linear chain) |
 | Physics bake vs analytic solution | ≤ 0.25 px per frame after key thinning |
 | Scene round trip (parse → write) | pixel-identical render |
 | `.pli` reader vs independent reference parser | identical on 65 files / about 6,000 strokes |
 | Independent code review | 52 findings, 50 fixed with regression tests |
 
-## 10. Limitations and future work
+## 11. Limitations and future work
 
 - Developed and verified on Windows with OpenToonz 1.8. Other platforms are untested.
 - Drawings come from shapes, paths, brushes and imported art. Generating detailed illustrations from scratch is out of scope; the parts library and import tools are the intended route.
@@ -155,7 +176,7 @@ Lessons accumulate across sessions from tool errors, verification problems, rend
   - OpenToonz fx graphs (glow, blur, compositing presets for specific studio looks)
   - plastic skeleton deformation
   - audio-driven lip sync
-  - recipe-driven walk and run cycles on part-based rigs
+  - front and three-quarter views for the character rigs (they are side view only today)
 
 ## Acknowledgements
 

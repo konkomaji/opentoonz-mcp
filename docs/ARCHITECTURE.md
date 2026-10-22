@@ -3,7 +3,7 @@
 This is how I structured the server, and the rules I follow when I change it. The guiding idea: the assistant may only ever touch an OpenToonz scene through a transaction it can undo, and everything it writes must be something OpenToonz itself would write.
 
 ```
-MCP client ──stdio──► otmcp.server (FastMCP, 44 tools)
+MCP client ──stdio──► otmcp.server (FastMCP, 48 tools)
                           │  every scene-changing call: lock → snapshot → edit → verify → write → journal
           ┌───────────────┼──────────────────┬──────────────────┬──────────────┐
           ▼               ▼                  ▼                  ▼              ▼
@@ -34,6 +34,8 @@ MCP client ──stdio──► otmcp.server (FastMCP, 44 tools)
 | `pli.py` | `.pli` reader (v5.7 and later). `pressure_patch` rewrites thickness bytes in place (periodic on loops, per-frame seeds, atomic write). |
 | `assets.py` | Parts library (global, with variants), SVG file to shapes, image placement. |
 | `physics.py` | Bounce, jump, second-order springs, SmoothDamp, trauma shake, RDP key thinning, blink and lip-sync charts. Reads `data/recipes.json`. |
+| `anatomy.py` | Human proportions by age and sex (Drillis-Contini, de Leva, CDC/NHANES), mass split and centre of mass, the 16-part side-view rig (joints, parents, drawn shapes, mirroring). |
+| `gait.py` | Walk and run cycles: gait norms by age and sex, planted rolling feet, two-bone IK, inverted-pendulum and spring-mass pelvis, self-check report. Pure functions; `server.py` bakes the result into keys. |
 | `style.py` | Style presets plus learned overrides; colour design (kage, iro-tore, lighting); built-in rule summary. |
 | `learn.py` | Lessons store with advice, ranking and `tune_style`. |
 | `server.py` | The tools, plus `Ctx` (the per-call transaction), compile and render. |
