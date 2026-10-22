@@ -539,6 +539,9 @@ Walk a build_character rig with biomechanically correct timing for its age and s
     old age shorter steps). speed m/s, cadence steps/min override them. cycles (default 2) or end.
     travel=false walks in place (pan the BG). on=2 holds every pose 2 frames (keys become constant).
     bounce, arm_swing scale the motion (1 = natural; >1 = cartoon); lean adds forward trunk lean (deg).
+    mood (Williams beat chart and character walks): natural | brisk | stroll (16 frames a step) |
+    tired (20, head down, low clearance) | proud (chest out) | happy (double bounce) | sneak (crouched,
+    24 frames) | heavy (long contact, deep down) | cartoon (8 frames). speed/cadence still override.
     Returns the self-check: cadence, step length, vertical oscillation, knee flexion, foot slip.
 
 | parameter | type | required | default |
@@ -556,6 +559,7 @@ Walk a build_character rig with biomechanically correct timing for its age and s
 | `arm_swing` | number |  | 1.0 |
 | `lean` | number |  | 0.0 |
 | `phase` | number |  | 0.0 |
+| `mood` | string |  | "natural" |
 
 ## `run_cycle`
 

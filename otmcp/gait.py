@@ -49,6 +49,33 @@ _RUN = [
     (65, 160, 164, 2.4, 2.2, 0.40, 6, -34, -2, 22, 85, 8, 9, 0.08),
     (80, 156, 160, 1.9, 1.8, 0.43, 4, -28, -2, 16, 85, 6, 11, 0.06),
 ]
+# Walk moods (Williams, "The Animator's Survival Kit", pp. 109-110 beat chart and the character walks;
+# Blair, "Cartoon Animation"): multipliers on the measured norms. cadence x / speed x / bounce / arm swing /
+# lean (deg) / lift x / stance + / crouch (fraction of leg) / double bounce / head drop (deg).
+MOODS = {
+    "natural": (1.00, 1.00, 1.0, 1.0, 0, 1.0, 0.00, 0.00, 0.000, 0),
+    "brisk": (1.12, 1.25, 1.0, 1.3, 3, 1.3, -0.02, 0.00, 0.000, 0),
+    "stroll": (0.75, 0.70, 0.8, 0.7, 0, 0.8, 0.02, 0.00, 0.000, 0),     # 16 frames a step
+    "tired": (0.62, 0.50, 0.6, 0.4, 8, 0.4, 0.04, 0.02, 0.000, 12),     # 20 frames, low clearance, head down
+    "proud": (0.95, 1.00, 0.8, 1.2, -4, 1.1, 0.00, 0.00, 0.000, -4),    # chest out, chin up
+    "happy": (1.10, 1.10, 1.2, 1.2, 0, 1.4, 0.00, 0.00, 0.012, 0),      # double bounce
+    "sneak": (0.50, 0.35, 0.6, 0.3, 12, 2.5, 0.08, 0.08, 0.000, -6),    # 24 frames, crouched, high lift
+    "heavy": (0.85, 0.75, 1.5, 0.8, 2, 0.8, 0.04, 0.02, 0.000, 0),      # long contact, deep down
+    "cartoon": (1.50, 1.20, 2.0, 1.5, 4, 2.0, 0.00, 0.00, 0.000, 0),    # 8 frames a step
+}
+
+
+def apply_mood(n: dict, mood: str) -> dict:
+    """Norms adjusted for a walk mood; also returns the cycle() extras."""
+    if mood not in MOODS:
+        raise ValueError(f"mood must be one of {list(MOODS)}")
+    ck, sk, bounce, arm, lean, lift, stance, crouch, dbl, head = MOODS[mood]
+    n = dict(n, cadence=n["cadence"] * ck, speed=n["speed"] * sk, lift=n["lift"] * lift,
+             stance=min(0.75, n["stance"] + stance))
+    return n, {"bounce": bounce, "arm_swing": arm, "lean_add": lean, "crouch": crouch, "double_bounce": dbl,
+               "head_drop": head}
+
+
 _FIELDS = ("cadence", "speed", "stance", "hs_pitch", "to_pitch", "sh_mean", "sh_amp", "el_mean", "el_amp",
            "lean", "lift")
 
@@ -149,7 +176,7 @@ def _stance_pitch(s, n, kind):
 
 def cycle(kind: str, rest: dict, n: dict, height_px: float, px_per_m: float, fps: float, ground: float,
           frames: int, travel: bool = True, bounce: float = 1.0, arm_swing: float = 1.0, lean_add: float = 0.0,
-          phase: float = 0.0) -> dict:
+          phase: float = 0.0, crouch: float = 0.0, double_bounce: float = 0.0, head_drop: float = 0.0) -> dict:
     """Per-frame rig motion. rest: rest_joints(); n: norms() (possibly overridden).
 
     Returns {frames: [{root: (dx, dy), angles: {part: local screen-CCW deg}, world: {...}}], report}."""
@@ -280,7 +307,9 @@ def cycle(kind: str, rest: dict, n: dict, height_px: float, px_per_m: float, fps
     report["mean_hip_drop_m"] = round((sum(hy) / N - hip0[1]) / px_per_m, 4)
 
     def hip_y(t):
-        return curve(t) + drop
+        # crouch lowers the hips (bent knees, sneak); double_bounce adds two extra dips per step (happy)
+        extra = crouch * L + double_bounce * L * (1 - math.cos(8 * math.pi * t / T)) / 2
+        return curve(t) + drop + extra
 
     def hipfn(t):
         return (X(t), hip_y(t))
@@ -320,7 +349,7 @@ def cycle(kind: str, rest: dict, n: dict, height_px: float, px_per_m: float, fps
         p_near = ((t / T) + phase) % 1.0
         trunk = -lean - 1.0 * math.cos(4 * math.pi * p_near)        # a little more lean at each contact
         ang["torso"] = trunk
-        ang["head"] = -trunk * 0.7
+        ang["head"] = -trunk * 0.7 - head_drop
         for side, ph in (("near", phase), ("far", phase + 0.5)):
             p = ((t / T) + ph - 0.5 - 0.04) % 1.0                    # opposite the same-side leg, slight lag
             c = math.cos(2 * math.pi * p)

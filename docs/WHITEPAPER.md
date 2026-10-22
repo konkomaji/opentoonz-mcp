@@ -16,7 +16,7 @@ Five ideas make it work:
 4. **Transactional safety.** Snapshots, rollback, locking and verification.
 5. **Studio practice and physics as parameters.** Not prose guidance.
 
-The system has 52 tools and 153 automated tests, 41 of which run through the installed OpenToonz.
+The system has 52 tools and 163 automated tests, 41 of which run through the installed OpenToonz.
 
 ## 1. Problem
 
@@ -112,6 +112,7 @@ I wanted human motion that holds up to a physiotherapist's eye, not just an anim
 - **Gait** (`gait.py`). Timing comes from gait studies by age and sex (Sutherland for children, Bohannon and Andrews for adults by decade, jogging norms for running). The stance foot is planted in world space and rolls over Perry's rockers: heel, ankle, forefoot, then toe. When the hip moves out of reach, the heel rises just enough. Legs are solved by analytic two-bone IK.
   - **Walk.** The hip rides the highest arc the loaded legs allow, as an inverted pendulum: low at double support, high at mid-stance.
   - **Run.** A spring-mass model: an exact gravity parabola in flight, and a linear-spring arc in contact that matches position, velocity and acceleration (−g) at take-off.
+- **Moods.** Richard Williams's beat chart and character walks become multipliers on the measured norms: stroll 16 frames a step, tired 20, sneak 24 (crouched, high lift), cartoon 8, a happy double bounce, and a heavy long contact. The constraints still hold, so feet stay planted in every mood.
 - **Scaling.** Gait norms are rescaled to the actual body by dynamic similarity: speed ∝ √(stature) and cadence ∝ 1/√(stature) relative to the norm's stature.
 - **Self-check.** Each call reports cadence, step length, vertical oscillation, knee flexion and foot slip. The slip is measured again by forward kinematics from the keys OpenToonz will actually evaluate.
 
@@ -175,7 +176,7 @@ Lessons accumulate across sessions from tool errors, verification problems, rend
 
 | Check | Result |
 |---|---|
-| Unit and regression tests | 153 tests passing (41 run through OpenToonz 1.8.0) |
+| Unit and regression tests | 163 tests passing (41 run through OpenToonz 1.8.0) |
 | Keyframe evaluator vs `tcomposer` | ≤ 1.5 px on every frame (ease → speed → linear chain) |
 | Physics bake vs analytic solution | ≤ 0.25 px per frame after key thinning |
 | Scene round trip (parse → write) | pixel-identical render |

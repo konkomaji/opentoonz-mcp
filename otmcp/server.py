@@ -1887,7 +1887,7 @@ def _rig(c: Ctx, character: str) -> dict:
 
 def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | None, cycles: float | None,
                speed: float | None, cadence: float | None, travel: bool, on: int, bounce: float,
-               arm_swing: float, lean: float, phase: float) -> dict:
+               arm_swing: float, lean: float, phase: float, mood: str = "natural") -> dict:
     if on not in (1, 2):
         raise ValueError("on must be 1 (ones) or 2 (twos)")
     if start < 1:
@@ -1895,7 +1895,7 @@ def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | Non
     if speed is not None and speed <= 0 or cadence is not None and cadence <= 0:
         raise ValueError("speed and cadence must be > 0")
     c = Ctx(scene, f"{kind}_cycle", {"character": character, "start": start, "end": end, "cycles": cycles,
-                                     "speed": speed, "cadence": cadence, "travel": travel, "on": on})
+                                     "speed": speed, "cadence": cadence, "travel": travel, "on": on, "mood": mood})
     rg = _rig(c, character)
     n = gait.norms(kind, rg["age"], rg["sex"])
     # dynamic similarity (equal Froude number): a taller or shorter body than the norm's walks at
@@ -1904,6 +1904,11 @@ def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | Non
                        anatomy.stature_m(rg["age"], rg["sex"]))
     n["speed"] *= froude
     n["cadence"] /= froude
+    extras = {"bounce": 1.0, "arm_swing": 1.0, "lean_add": 0.0}
+    if kind == "walk":
+        n, extras = gait.apply_mood(n, mood)
+    elif mood != "natural":
+        raise ValueError("mood applies to walk_cycle only")
     if speed is not None:
         if cadence is None:  # step length and cadence both grow with speed (about as its square root)
             n["cadence"] *= (speed / n["speed"]) ** 0.5
@@ -1918,8 +1923,10 @@ def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | Non
         raise ValueError("end must be after start")
     frames = end - start + 1
     joints = {k: tuple(v) for k, v in rg["joints"].items()}
+    extras.update(bounce=extras["bounce"] * bounce, arm_swing=extras["arm_swing"] * arm_swing,
+                  lean_add=extras["lean_add"] + lean)
     res = gait.cycle(kind, joints, n, rg["height_px"], rg["px_per_m"], fps, rg["ground_y"], frames,
-                     travel=travel, bounce=bounce, arm_swing=arm_swing, lean_add=lean, phase=phase)
+                     travel=travel, phase=phase, **extras)
     flip = -1.0 if rg["facing"] == "left" else 1.0
     root = c.stage_id(rg["root"])
     cols = {p: c.stage_id(lname) for p, lname in rg["parts"].items()}
@@ -1989,7 +1996,8 @@ def _baked_slip(c, rg, res, cols, root, start, end, flip, bx, by, pan=0.0) -> fl
 @tool
 def walk_cycle(scene: str, character: str, start: int = 1, end: int | None = None, cycles: float | None = None,
                speed: float | None = None, cadence: float | None = None, travel: bool = True, on: int = 1,
-               bounce: float = 1.0, arm_swing: float = 1.0, lean: float = 0.0, phase: float = 0.0) -> dict:
+               bounce: float = 1.0, arm_swing: float = 1.0, lean: float = 0.0, phase: float = 0.0,
+               mood: str = "natural") -> dict:
     """Walk a build_character rig with biomechanically correct timing for its age and sex.
     Feet stay planted and roll heel -> flat -> ball -> toe; legs use two-bone IK; the hips ride an
     inverted-pendulum arc (low at contact, high at passing); arms swing opposite the legs.
@@ -1997,9 +2005,12 @@ def walk_cycle(scene: str, character: str, start: int = 1, end: int | None = Non
     old age shorter steps). speed m/s, cadence steps/min override them. cycles (default 2) or end.
     travel=false walks in place (pan the BG). on=2 holds every pose 2 frames (keys become constant).
     bounce, arm_swing scale the motion (1 = natural; >1 = cartoon); lean adds forward trunk lean (deg).
+    mood (Williams beat chart and character walks): natural | brisk | stroll (16 frames a step) |
+    tired (20, head down, low clearance) | proud (chest out) | happy (double bounce) | sneak (crouched,
+    24 frames) | heavy (long contact, deep down) | cartoon (8 frames). speed/cadence still override.
     Returns the self-check: cadence, step length, vertical oscillation, knee flexion, foot slip."""
     return _gait_tool(scene, character, "walk", start, end, cycles, speed, cadence, travel, on, bounce,
-                      arm_swing, lean, phase)
+                      arm_swing, lean, phase, mood)
 
 
 @tool

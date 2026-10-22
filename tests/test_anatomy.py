@@ -153,3 +153,24 @@ def test_bmi_widens_soft_tissue_only():
         anatomy.proportions(30, "m", bmi="average")
     ref = anatomy.reference(person="woman", region="bangladesh", height_px=500)
     assert ref["region"]["key"] == "bd" and "averages" in ref["caveat"]
+
+
+@pytest.mark.parametrize("mood", list(gait.MOODS))
+def test_every_walk_mood_keeps_feet_planted(mood):
+    pr = anatomy.proportions(person="woman")
+    h = pr["stature_m"] * 340
+    j = anatomy.rest_joints(pr, h, 500, 900)
+    n, extra = gait.apply_mood(gait.norms("walk", 35, "f"), mood)
+    r = gait.cycle("walk", j, n, h, 340, 24, 900, 60, **extra)["report"]
+    assert r["legs_reached"] and r["max_foot_slip_px"] < 0.5
+
+
+def test_mood_timing_matches_williams_beat_chart():
+    def frames_per_step(mood):
+        n, _ = gait.apply_mood(gait.norms("walk", 35, "m"), mood)
+        return 24 * 60 / n["cadence"]
+    assert 12 <= frames_per_step("natural") <= 14
+    assert 15 <= frames_per_step("stroll") <= 18 and 19 <= frames_per_step("tired") <= 23
+    assert 23 <= frames_per_step("sneak") <= 28 and 7.5 <= frames_per_step("cartoon") <= 9.5
+    with pytest.raises(ValueError):
+        gait.apply_mood({}, "angry")
