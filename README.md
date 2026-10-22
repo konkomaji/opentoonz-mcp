@@ -7,8 +7,8 @@
 **Let an AI assistant animate inside OpenToonz, the open-source 2D studio tool, and keep every frame editable.**
 
 [![CI](https://github.com/konkomaji/opentoonz-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/konkomaji/opentoonz-mcp/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/opentoonz-mcp.svg)](https://pypi.org/project/opentoonz-mcp/)
-[![Python](https://img.shields.io/pypi/pyversions/opentoonz-mcp.svg)](https://pypi.org/project/opentoonz-mcp/)
+[![Version](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/main/pyproject.toml&query=%24.project.version&label=version&color=blue)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/main/pyproject.toml&query=%24.project%5B%27requires-python%27%5D&label=python&color=blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
 
@@ -70,16 +70,18 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 
 ## Install
 
+It isn't on PyPI yet, so for now I install it straight from GitHub:
+
 ```bash
-pip install opentoonz-mcp
+pip install git+https://github.com/konkomaji/opentoonz-mcp
 # or run without installing:
-uvx opentoonz-mcp
+uvx --from git+https://github.com/konkomaji/opentoonz-mcp opentoonz-mcp
 ```
 
 ### Claude Code
 
 ```bash
-claude mcp add opentoonz -- uvx opentoonz-mcp
+claude mcp add opentoonz -- uvx --from git+https://github.com/konkomaji/opentoonz-mcp opentoonz-mcp
 ```
 
 ### Claude Desktop, Cursor and other MCP clients
@@ -89,7 +91,7 @@ claude mcp add opentoonz -- uvx opentoonz-mcp
   "mcpServers": {
     "opentoonz": {
       "command": "uvx",
-      "args": ["opentoonz-mcp"],
+      "args": ["--from", "git+https://github.com/konkomaji/opentoonz-mcp", "opentoonz-mcp"],
       "env": {
         "OPENTOONZ_HOME": "C:\\Program Files\\OpenToonz",
         "OPENTOONZ_STUFF": "C:\\OpenToonz stuff"

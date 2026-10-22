@@ -7,6 +7,10 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Changed
+
+- The README badges now read the version and Python range from `pyproject.toml`, and the install steps use the GitHub URL until I publish to PyPI.
+
 ## [0.1.0] - 2026-10-22
 
 This is the first public release. I built it so an AI assistant can work inside OpenToonz like an animator: it writes real scenes and native vector levels, and it times them on the xsheet instead of producing flat video.
