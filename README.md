@@ -7,8 +7,8 @@
 **Let an AI assistant animate inside OpenToonz, the open-source 2D studio tool, and keep every frame editable.**
 
 [![CI](https://github.com/konkomaji/opentoonz-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/konkomaji/opentoonz-mcp/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/opentoonz-mcp.svg)](https://pypi.org/project/opentoonz-mcp/)
-[![Python](https://img.shields.io/pypi/pyversions/opentoonz-mcp.svg)](https://pypi.org/project/opentoonz-mcp/)
+[![PyPI](https://img.shields.io/pypi/v/opentoonz-mcp.svg?cacheSeconds=3600)](https://pypi.org/project/opentoonz-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/opentoonz-mcp.svg?cacheSeconds=3600)](https://pypi.org/project/opentoonz-mcp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
 
