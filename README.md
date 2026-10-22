@@ -78,6 +78,8 @@ pip install opentoonz-mcp
 uvx opentoonz-mcp
 ```
 
+> **Use pip 26.2.2+ or uv 0.13.4+.** Older versions still trust the emSign certificate authority that was pulled after the [October 2026 eMudhra incident](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576). Upgrade first with `python -m pip install --upgrade pip certifi` or `UV_SYSTEM_CERTS=true uv self update`. The package itself requires `certifi>=2026.10.19`.
+
 ### Claude Code
 
 ```bash

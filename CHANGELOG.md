@@ -7,6 +7,10 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Security
+
+- After the eMudhra/emSign CA incident (October 2026), opentoonz-mcp requires `certifi>=2026.10.19`. Every workflow now installs hash-pinned pip 26.2.2 and the fixed certifi before anything else. The README asks for pip 26.2.2+ or uv 0.13.4+.
+
 ### Fixed
 
 - The MCP Registry rejected the 0.1.0 `server.json` because its description was over 100 characters. I shortened it, `release_check.py` now enforces the limit, and a manual `registry.yml` workflow re-publishes `server.json` without moving the tag.

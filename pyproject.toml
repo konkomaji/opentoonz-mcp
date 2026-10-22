@@ -30,6 +30,7 @@ dependencies = [
   "shapely>=2.0",
   "fonttools>=4.40",
   "svgelements>=1.9",
+  "certifi>=2026.10.19",  # trust bundle without the distrusted emSign root (Oct 2026 incident)
 ]
 
 [project.optional-dependencies]
