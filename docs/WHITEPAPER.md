@@ -16,7 +16,7 @@ Five ideas make it work:
 4. **Transactional safety.** Snapshots, rollback, locking and verification.
 5. **Studio practice and physics as parameters.** Not prose guidance.
 
-The system has 48 tools and 130 automated tests, 32 of which render through the installed OpenToonz.
+The system has 51 tools and 149 automated tests, 41 of which run through the installed OpenToonz.
 
 ## 1. Problem
 
@@ -123,7 +123,19 @@ I wanted human motion that holds up to a physiotherapist's eye, not just an anim
 | Run flight acceleration | exactly g | g |
 | Planted-foot slip after baking keys | < 0.5 px | 0 |
 
-## 7. Studio practice as parameters
+## 7. Studio looks as fx graphs
+
+`apply_look` writes real OpenToonz fx nodes into the scene, so a look is something an artist can open in the FX Schematic and adjust, not a filter baked into pixels.
+
+- **Format.** I read the serializer (`TFx::saveData`, `FxDag`, the param classes) and follow its rule that an object is written in full at its first occurrence and referenced afterwards. A post chain before the output therefore carries the xsheet node's definition inside its first port, exactly as OpenToonz saves it. One `normalize` pass restores that rule after any edit.
+- **Units.** Length parameters are stored in 1/53.333 inch. I confirmed by render that an offset of d px comes out exactly d px wide.
+- **Safety.** Every node is named `otmcp:<look>:<role>`. Re-applying replaces only those nodes, `remove_look` restores the file byte for byte, and fx made by hand stay connected. OpenToonz itself loads and re-saves the graph intact.
+- **Looks.** Each is built from fx ids and parameter names verified in the source:
+  - Klaus-style volumetric light: a body-highlight form shadow (Multiply) away from the light and a warm rim (Add) toward it, per layer, both following one light angle.
+  - Spider-Verse misregistration: barrel-distortion chromatic aberration, posterize and print specks.
+  - Bloom (ghibli, anime): `iwa_Bloom` light screened back over the picture.
+
+## 8. Studio practice as parameters
 
 Classic 2D practice is encoded as defaults the tools apply and validate against, not as text the assistant must remember:
 
@@ -136,7 +148,7 @@ Classic 2D practice is encoded as defaults the tools apply and validate against,
 
 Each render is reviewed automatically: frame count, blank frames, single-frame pops, dead holds and photosensitive flashing.
 
-## 8. Safety and trust
+## 9. Safety and trust
 
 An assistant that edits a production file must never be the reason work is lost.
 
@@ -146,7 +158,7 @@ An assistant that edits a production file must never be the reason work is lost.
 - **Verified writes.** Every write is serialised to a temp file, re-parsed and structurally verified, and only then atomically replaces the scene.
 - **Journal.** Every action and every detected outside change is logged.
 
-## 9. Context and learning
+## 10. Context and learning
 
 `scene_context` gives the assistant a complete, current picture of the scene:
 
@@ -157,23 +169,23 @@ An assistant that edits a production file must never be the reason work is lost.
 
 Lessons accumulate across sessions from tool errors, verification problems, render reviews, the assistant's own recorded insights and the user's ratings. They are ranked by kind and recurrence. When feedback implies a default should change, `tune_style` makes it permanent for every later drawing.
 
-## 10. Evaluation
+## 11. Evaluation
 
 | Check | Result |
 |---|---|
-| Unit and regression tests | 130 tests passing (32 render through OpenToonz 1.8.0) |
+| Unit and regression tests | 149 tests passing (41 run through OpenToonz 1.8.0) |
 | Keyframe evaluator vs `tcomposer` | ≤ 1.5 px on every frame (ease → speed → linear chain) |
 | Physics bake vs analytic solution | ≤ 0.25 px per frame after key thinning |
 | Scene round trip (parse → write) | pixel-identical render |
 | `.pli` reader vs independent reference parser | identical on 65 files / about 6,000 strokes |
 | Independent code review | 52 findings, 50 fixed with regression tests |
 
-## 11. Limitations and future work
+## 12. Limitations and future work
 
 - Developed and verified on Windows with OpenToonz 1.8. Other platforms are untested.
 - Drawings come from shapes, paths, brushes and imported art. Generating detailed illustrations from scratch is out of scope; the parts library and import tools are the intended route.
 - Future work:
-  - OpenToonz fx graphs (glow, blur, compositing presets for specific studio looks)
+  - Ben-Day dot and hatching screens restricted to shadow areas (needs a shadow matte per layer)
   - plastic skeleton deformation
   - audio-driven lip sync
   - front and three-quarter views for the character rigs (they are side view only today)

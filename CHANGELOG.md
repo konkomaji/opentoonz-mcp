@@ -13,6 +13,8 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 - `build_character` builds a 16-part side-view cut-out rig with real proportions, parented like a skeleton with every pivot on its joint. It covers toddlers to old age, has a few hair styles, and can face left or right.
 - `walk_cycle` and `run_cycle` animate those rigs from gait research. Timing by age and sex, planted feet that roll heel to ball to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in flight. Each call checks itself: it reports cadence, step length, vertical bounce, knee flexion and foot slip measured from the baked keys.
 
+- `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
+
 ### Changed
 
 - The README badges now read the version and Python range from `pyproject.toml`, and the install steps use the GitHub URL until I publish to PyPI.

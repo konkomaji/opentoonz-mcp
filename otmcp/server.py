@@ -39,6 +39,7 @@ from mcp.server.fastmcp import Image as McpImage
 
 from . import anatomy, assets, config, curve, gait, learn, physics, pli, tnz, vec
 from . import draw as drawlib
+from . import fx as fxlib
 from . import style as styles
 from .scene import Cell, SceneDoc, file_hash
 
@@ -2227,6 +2228,58 @@ def knowledge(query: str | None = None, limit: int = 20) -> list[dict]:
 def list_scenes() -> list[str]:
     """Scenes known to the MCP."""
     return _list()
+
+
+# ====================================================================== tools: studio looks (fx)
+@tool
+def list_looks() -> dict:
+    """Studio looks apply_look can build from real OpenToonz fx, with what each does."""
+    return {k: {"about": v["about"], "whole_frame": [r for _, _, r in v["post"]],
+                "per_layer": [r for _, _, r in v["layer"]]} for k, v in fxlib.LOOKS.items()}
+
+
+@tool
+def apply_look(scene: str, look: str, layers: list[str] | None = None, strength: float = 1.0,
+               light_angle: float = 135.0) -> dict:
+    """Give the scene a studio look made of real OpenToonz fx nodes (open the FX Schematic to tweak them).
+    look: ghibli | klaus | spider_verse | comic | anime_satsuei | painterly | cartoon_saloon (list_looks).
+    Whole-frame fx go just before the output; per-layer fx (e.g. Klaus form shadow and rim light) go on
+    `layers` (default: every layer except ones named like bg/background/sky). strength scales the
+    amounts (0.5 subtle, 1 default, 1.5 strong). light_angle: degrees, 90 = light from above,
+    135 = top-left. Re-applying replaces the previous look; fx you made by hand are kept."""
+    if look not in fxlib.LOOKS:
+        raise ValueError(f"look must be one of {list(fxlib.LOOKS)}")
+    if not 0 < strength <= 3:
+        raise ValueError("strength must be in (0, 3]")
+    c = Ctx(scene, "apply_look", {"look": look, "layers": layers, "strength": strength,
+                                  "light_angle": light_angle})
+    spec = fxlib.LOOKS[look]
+    removed = fxlib.remove(c.doc)
+    dpi = c.doc.dpi()
+    made = fxlib.apply_post(c.doc, look, spec["post"], dpi, light_angle, strength) if spec["post"] else []
+    targets = []
+    if spec["layer"]:
+        names = [_safe(n) for n in layers] if layers else [
+            n for n in c.st["layers"] if not re.search(r"(^|_)(bg|background|sky|backdrop)($|_)", n.lower())]
+        fx_ids = c.doc._column_fx_ids()
+        for n in names:
+            c.layer(n)
+            ci = c.col_index(n)
+            if ci is not None and fx_ids[ci]:
+                targets.append(fx_ids[ci])
+        made += fxlib.apply_layer(c.doc, look, spec["layer"], targets, dpi, light_angle, strength)
+    c.st["look"] = {"name": look, "strength": strength, "light_angle": light_angle}
+    return c.commit({"look": look, "fx": made, "layers_lit": len(targets), "replaced_nodes": removed,
+                     "about": spec["about"]})
+
+
+@tool
+def remove_look(scene: str) -> dict:
+    """Remove the fx apply_look added (fx you made in OpenToonz stay)."""
+    c = Ctx(scene, "remove_look", {})
+    n = fxlib.remove(c.doc)
+    c.st.pop("look", None)
+    return c.commit({"removed_nodes": n})
 
 
 def main() -> None:
