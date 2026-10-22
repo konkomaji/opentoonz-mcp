@@ -7,22 +7,6 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
-### Added
-
-- `anatomy_reference` gives body proportions for any age and sex: heads tall, joint heights, segment lengths, widths and depths, mass split and centre of mass. The numbers come from Drillis-Contini, de Leva (1996) and CDC/NHANES stature.
-- `build_character` builds a 16-part side-view cut-out rig with real proportions, parented like a skeleton with every pivot on its joint. It covers toddlers to old age, has a few hair styles, and can face left or right.
-- `walk_cycle` and `run_cycle` animate those rigs from gait research. Timing by age and sex, planted feet that roll heel to ball to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in flight. Each call checks itself: it reports cadence, step length, vertical bounce, knee flexion and foot slip measured from the baked keys.
-
-- `region` and `bmi` options on `anatomy_reference` and `build_character`, plus `list_regions`. The region sets the adult stature and the leg proportion (sitting-height ratio) from national health surveys: NHANES for the US, NFHS for India and West Bengal, HSE for the UK, Japan's national nutrition survey, DHS and NCD-RisC. A body type only changes when you pass a BMI, or `bmi="average"` for the surveyed mean. Heads and faces never change by region. Every result carries a note that these are population averages and that individuals vary far more.
-- Hatched shading: `shadow={"style": "hatch"}` draws the shadow side as pen hatching instead of a flat tone. The lines are clipped exactly to the shadow, pulled in so they never cross the outline, packed densest on the side away from the light, and can cross-hatch. They are real inked .pli strokes with pressure taper. The idea comes from p5.brush's hatch(); I reimplemented it, I didn't copy it.
-- `walk_cycle` takes a `mood`: natural, brisk, stroll, tired, proud, happy (double bounce), sneak (crouched), heavy or cartoon. The timings follow Richard Williams's beat chart, for example natural 12 frames a step, stroll 16, tired 20, sneak 24 and cartoon 8. Feet stay planted in every mood.
-- Walks and runs scale by dynamic similarity: a taller body walks faster with a lower cadence (equal Froude number).
-- `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
-
-### Changed
-
-- The README badges now read the version and Python range from `pyproject.toml`, and the install steps use the GitHub URL until I publish to PyPI.
-
 ## [0.1.0] - 2026-10-22
 
 This is the first public release. I built it so an AI assistant can work inside OpenToonz like an animator: it writes real scenes and native vector levels, and it times them on the xsheet instead of producing flat video.
@@ -51,6 +35,14 @@ This is the first public release. I built it so an AI assistant can work inside 
 - **Self-improvement.** Errors, verification problems, render reviews, the assistant's own insights and user feedback are stored as ranked lessons. `tune_style` makes default changes permanent.
 - **Render checks.** Each render is checked for frame count, blank frames, single-frame pops, dead holds and photosensitive flashing.
 - **Rendering.** Renders go through OpenToonz's own `tcomposer` to MP4, GIF or PNG sequences.
+- `anatomy_reference` gives body proportions for any age and sex: heads tall, joint heights, segment lengths, widths and depths, mass split and centre of mass. The numbers come from Drillis-Contini, de Leva (1996) and CDC/NHANES stature.
+- `build_character` builds a 16-part side-view cut-out rig with real proportions, parented like a skeleton with every pivot on its joint. It covers toddlers to old age, has a few hair styles, and can face left or right.
+- `walk_cycle` and `run_cycle` animate those rigs from gait research. Timing by age and sex, planted feet that roll heel to ball to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in flight. Each call checks itself: it reports cadence, step length, vertical bounce, knee flexion and foot slip measured from the baked keys.
+- `region` and `bmi` options on `anatomy_reference` and `build_character`, plus `list_regions`. The region sets the adult stature and the leg proportion (sitting-height ratio) from national health surveys: NHANES for the US, NFHS for India and West Bengal, HSE for the UK, Japan's national nutrition survey, DHS and NCD-RisC. A body type only changes when you pass a BMI, or `bmi="average"` for the surveyed mean. Heads and faces never change by region. Every result carries a note that these are population averages and that individuals vary far more.
+- Hatched shading: `shadow={"style": "hatch"}` draws the shadow side as pen hatching instead of a flat tone. The lines are clipped exactly to the shadow, pulled in so they never cross the outline, packed densest on the side away from the light, and can cross-hatch. They are real inked .pli strokes with pressure taper. The idea comes from p5.brush's hatch(); I reimplemented it, I didn't copy it.
+- `walk_cycle` takes a `mood`: natural, brisk, stroll, tired, proud, happy (double bounce), sneak (crouched), heavy or cartoon. The timings follow Richard Williams's beat chart, for example natural 12 frames a step, stroll 16, tired 20, sneak 24 and cartoon 8. Feet stay planted in every mood.
+- Walks and runs scale by dynamic similarity: a taller body walks faster with a lower cadence (equal Froude number).
+- `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
 - **Packaging.** An `opentoonz-mcp` command, OpenToonz path auto-detection, an MCP Registry `server.json`, and CI and release workflows.
 
 [Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v0.1.0...HEAD
