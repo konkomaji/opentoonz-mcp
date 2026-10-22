@@ -81,3 +81,16 @@ def test_walk_renders_with_feet_on_the_ground(scene):
         assert dark, f"no foot touching the ground at frame {f}"
         below = [x for x in range(W) if im.getpixel((x, int(990 * k))) < 128]
         assert not below, f"something drawn below the ground at frame {f}"
+
+
+def test_region_rig_walks_with_froude_scaling(scene):
+    S.build_character(scene, "a", person="man", x=300)
+    r = S.build_character(scene, "b", person="man", region="netherlands", x=900)
+    assert r["region"]["key"] == "nl" and "caveat" in r
+    wa = S.walk_cycle(scene, "a", cycles=1)
+    wb = S.walk_cycle(scene, "b", cycles=1)
+    ratio = (1.826 / 1.76) ** 0.5
+    assert wb["speed_m_s"] == pytest.approx(wa["speed_m_s"] * ratio, rel=1e-3)
+    assert wb["cadence_spm"] == pytest.approx(wa["cadence_spm"] / ratio, abs=0.1)
+    assert wb["legs_reached"] and wb["baked_slip_px"] < 0.5
+    assert "regions" in S.list_regions()

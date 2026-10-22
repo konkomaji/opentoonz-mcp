@@ -14,7 +14,9 @@ is rescaled from the adult table, so the child mass split is an approximation (a
 """
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 
 AGE_LABELS = {"baby": 1, "infant": 1, "toddler": 3, "child": 7, "kid": 7, "preteen": 10, "teen": 15,
               "teenager": 15, "young": 25, "young_adult": 25, "adult": 35, "middle": 50, "middle_aged": 50,
@@ -107,14 +109,45 @@ def stature_m(age: float, sex: str) -> float:
     return _lerp_table(_GROWTH, age, 1 if sex == "m" else 2)
 
 
-def proportions(age=None, sex=None, person=None) -> dict:
+_REGIONS: dict | None = None
+_BMI_REF = [(1, 17.0), (5, 15.5), (10, 17.0), (14, 19.5), (18, 22.0), (100, 22.0)]  # neutral build by age
+
+
+def regions() -> dict:
+    """Population means by region (data/regions.json, compiled from national health surveys)."""
+    global _REGIONS
+    if _REGIONS is None:
+        _REGIONS = json.loads((Path(__file__).parent / "data" / "regions.json").read_text(encoding="utf-8"))
+    return _REGIONS
+
+
+def region_key(region: str | None) -> str | None:
+    if region in (None, ""):
+        return None
+    k = str(region).lower().strip().replace(" ", "_").replace("-", "_")
+    d = regions()
+    k = d["aliases"].get(k, k)
+    if k not in d["regions"]:
+        raise ValueError(f"region must be one of {sorted(d['regions'])} (or {sorted(d['aliases'])})")
+    return k
+
+
+def proportions(age=None, sex=None, person=None, region: str | None = None, bmi: float | str | None = None) -> dict:
     """Body proportions as fractions of stature H, plus the stature in metres.
 
-    Heights are measured from the floor; lengths are joint-to-joint."""
+    Heights are measured from the floor; lengths are joint-to-joint. region scales stature to that
+    population's adult mean and shifts the leg length by its sitting-height ratio; bmi (a number, or
+    'average' for the region's mean) widens or narrows the soft-tissue widths and depths."""
     age, sex = resolve(age, sex, person)
     H = stature_m(age, sex)
     heads = _lerp_table(_GROWTH, age, 3)
     shr = _lerp_table(_GROWTH, age, 4)
+    rk = region_key(region)
+    rd = regions()["regions"][rk][sex] if rk else None
+    if rd:
+        H *= rd["stature_m"] / stature_m(30, sex)        # same growth curve, scaled to the regional adult mean
+        if rd["shr"]:
+            shr += (rd["shr"] / 100 - 0.52) * min(1.0, max(0.0, (age - 6) / 12))
     arm = _lerp_table(_GROWTH, age, 5)
     neck_k = _lerp_table(_GROWTH, age, 6)
     head = 1.0 / heads
@@ -129,7 +162,21 @@ def proportions(age=None, sex=None, person=None) -> dict:
     for k, (m, f) in _ADULT_W.items():
         adult = m if sex == "m" else f
         w[k] = _CHILD_W[k] + (adult - _CHILD_W[k]) * p
+    bmi_ref = _lerp_table(_BMI_REF, age, 1)
+    if bmi == "average":
+        if not rd or not rd["bmi"]:
+            raise ValueError("bmi='average' needs a region with a surveyed mean BMI")
+        bmi = rd["bmi"] if age >= 18 else None
+    if bmi is not None:
+        if not 12 <= float(bmi) <= 60:
+            raise ValueError("bmi must be 12..60")
+        # widths of soft tissue scale with sqrt(BMI) at a fixed height (mass ~ area); bones do not
+        kw = math.sqrt(float(bmi) / bmi_ref)
+        for k in w:
+            if k not in ("foot_length", "foot_height", "ankle_depth", "wrist_depth"):
+                w[k] *= kw
     return {
+        "region": rk, "bmi": float(bmi) if bmi is not None else None,
         "age": age, "sex": sex, "stature_m": round(H, 4), "heads": round(heads, 3),
         "head": head, "chin": chin, "shoulder": shoulder, "hip": hip, "knee": ankle + leg * 0.5,
         "ankle": ankle, "thigh": leg * 0.4990, "shank": leg * 0.5010,
@@ -159,9 +206,10 @@ def mass_fractions(age: float, sex: str) -> dict:
     return {k: {"mass": round(v[0], 5), "com": v[1]} for k, v in base.items()}
 
 
-def reference(age=None, sex=None, person=None, px_per_m: float | None = None, height_px: float | None = None) -> dict:
+def reference(age=None, sex=None, person=None, px_per_m: float | None = None, height_px: float | None = None,
+              region: str | None = None, bmi: float | str | None = None) -> dict:
     """Everything an animator needs to draw this person at a given scale (px)."""
-    pr = proportions(age, sex, person)
+    pr = proportions(age, sex, person, region, bmi)
     H = pr["stature_m"]
     if height_px is None:
         height_px = H * (px_per_m or 340.0)
@@ -181,6 +229,15 @@ def reference(age=None, sex=None, person=None, px_per_m: float | None = None, he
     }
     out["com_height_px"] = round(com_height(pr) * s, 1)
     out["notes"] = _notes(pr)
+    if pr["region"]:
+        rd = regions()["regions"][pr["region"]]
+        r = rd[pr["sex"]]
+        out["region"] = {"key": pr["region"], "label": rd["label"], "adult_mean_stature_m": r["stature_m"],
+                         "sd_m": r["sd_m"], "sd_assumed": r["sd_assumed"], "mean_bmi": r["bmi"],
+                         "sitting_height_ratio": r["shr"], "sources": r["sources"], "survey_age_band": r["age_band"]}
+        out["caveat"] = regions()["_caveat"]
+    if pr["bmi"] is not None:
+        out["bmi"] = pr["bmi"]
     return out
 
 

@@ -121,3 +121,35 @@ def test_ik_two_bone_exact():
     knee, ok = gait.ik2((0, 0), (30, 80), 50, 50)
     assert ok and abs(math.dist((0, 0), knee) - 50) < 1e-9 and abs(math.dist(knee, (30, 80)) - 50) < 1e-9
     assert knee[0] > 15                            # knee in front of the hip-ankle line
+
+
+def test_region_stature_and_leg_proportion_follow_the_surveys():
+    reg = anatomy.regions()["regions"]
+    for key in ("us", "in_wb", "jp", "nl"):
+        for sx in "mf":
+            p = anatomy.proportions(30, sx, region=key)
+            assert abs(p["stature_m"] - reg[key][sx]["stature_m"]) < 1e-9
+    # a lower sitting-height ratio means relatively longer legs
+    wb, jp = anatomy.proportions(30, "m", region="west_bengal"), anatomy.proportions(30, "m", region="japan")
+    assert wb["hip"] > anatomy.proportions(30, "m")["hip"] > jp["hip"]
+    assert anatomy.region_key("Kolkata") == "in_wb" and anatomy.region_key(None) is None
+    with pytest.raises(ValueError):
+        anatomy.region_key("atlantis")
+
+
+def test_region_children_scale_and_heads_do_not_change():
+    a = anatomy.proportions(8, "f")
+    b = anatomy.proportions(8, "f", region="in_wb")
+    assert b["stature_m"] < a["stature_m"] and b["heads"] == a["heads"]
+
+
+def test_bmi_widens_soft_tissue_only():
+    lean = anatomy.proportions(30, "m", bmi=19)
+    heavy = anatomy.proportions(30, "m", bmi=32)
+    assert heavy["waist_depth"] / lean["waist_depth"] == pytest.approx((32 / 19) ** 0.5)
+    assert heavy["foot_length"] == lean["foot_length"] and heavy["hip"] == lean["hip"]
+    assert anatomy.proportions(30, "f", region="jp", bmi="average")["bmi"] == 20.8
+    with pytest.raises(ValueError):
+        anatomy.proportions(30, "m", bmi="average")
+    ref = anatomy.reference(person="woman", region="bangladesh", height_px=500)
+    assert ref["region"]["key"] == "bd" and "averages" in ref["caveat"]

@@ -1772,28 +1772,43 @@ def lip_sync(scene: str, layer: str, text: str, start: int, part: str, x: float,
 # ====================================================================== tools: anatomy / character rigs
 @tool
 def anatomy_reference(person: str | None = None, age: float | str | None = None, sex: str | None = None,
-                      height_px: float | None = None, px_per_m: float = 340.0) -> dict:
+                      height_px: float | None = None, px_per_m: float = 340.0, region: str | None = None,
+                      bmi: float | str | None = None) -> dict:
     """Body proportions for drawing a person, from anthropometric data (Drillis-Contini segment
     lengths, de Leva masses, CDC/NHANES stature, growth-standard head ratios).
     person: baby | toddler | boy | girl | child | teen | teen_boy | teen_girl | young_man | young_woman |
     man | woman | old_man | old_woman (or give age years / label and sex). Returns heights from the floor,
     segment lengths, front widths, side depths (px), heads tall, mass fractions, centre of mass, notes.
-    Scale: height_px, or px_per_m (340 = 1.75 m adult about 600 px; keep one px_per_m per scene)."""
-    return anatomy.reference(age, sex, person, px_per_m=px_per_m, height_px=height_px)
+    Scale: height_px, or px_per_m (340 = 1.75 m adult about 600 px; keep one px_per_m per scene).
+    region (list_regions): population averages from national health surveys (stature, leg length via
+    sitting-height ratio); bmi: a number, or 'average' for the region's surveyed mean (default: a
+    neutral build). Averages only: individuals vary far more than regions do."""
+    return anatomy.reference(age, sex, person, px_per_m=px_per_m, height_px=height_px, region=region, bmi=bmi)
+
+
+@tool
+def list_regions() -> dict:
+    """Regions with surveyed body averages for anatomy_reference / build_character (region=...)."""
+    d = anatomy.regions()
+    return {"regions": {k: {"label": v["label"], "men_m": v["m"]["stature_m"], "women_m": v["f"]["stature_m"],
+                            "mean_bmi": [v["m"]["bmi"], v["f"]["bmi"]]} for k, v in d["regions"].items()},
+            "aliases": d["aliases"], "about": d["_about"], "caveat": d["_caveat"]}
 
 
 @tool
 def build_character(scene: str, name: str, person: str | None = None, age: float | str | None = None,
                     sex: str | None = None, x: float | None = None, ground_y: float | None = None,
                     px_per_m: float = 340.0, facing: str = "right", hair: str = "short",
-                    colors: dict | None = None, style: str | None = None) -> dict:
+                    colors: dict | None = None, style: str | None = None, region: str | None = None,
+                    bmi: float | str | None = None) -> dict:
     """Build a side-view cut-out character rig with real proportions for the age and sex.
     Creates a root peg '<name>' at the hips and 16 vector layers '<name>_<part>' (torso, head, upper arm,
     forearm, hand, thigh, shin, foot, toe; far side darker and behind), parented like a skeleton with
     each pivot on its joint. Animate it with walk_cycle / run_cycle, or key the parts directly
     (rotation on a part turns it about its joint). x: hip x px (default centre); ground_y: floor line px
     (default 90% of the frame). hair: short | long | bob | ponytail | bun | none.
-    colors: {skin, hair, top, bottom, shoes, line}. Every layer stays an editable OpenToonz vector level."""
+    colors: {skin, hair, top, bottom, shoes, line}. region / bmi: as in anatomy_reference (population
+    averages; faces and heads are never varied by region). Every layer stays an editable vector level."""
     if facing not in ("right", "left"):
         raise ValueError("facing must be right or left")
     if hair not in ("short", "long", "bob", "ponytail", "bun", "none"):
@@ -1802,9 +1817,9 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
         raise ValueError(f"style must be one of {list(styles.STYLES)}")
     if px_per_m <= 0:
         raise ValueError("px_per_m must be > 0")
-    pr = anatomy.proportions(age, sex, person)
+    pr = anatomy.proportions(age, sex, person, region, bmi)
     c = Ctx(scene, "build_character", {"name": name, "person": person, "age": pr["age"], "sex": pr["sex"],
-                                       "facing": facing})
+                                       "facing": facing, "region": pr["region"], "bmi": pr["bmi"]})
     rig = _safe(name)
     rigs = c.st.setdefault("rigs", {})
     if rig.lower() in (r.lower() for r in rigs):
@@ -1849,12 +1864,17 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
         _write_drawing(c, lname, 1, shapes[part])
         _retime(c, lname)
     rigs[rig] = {"age": pr["age"], "sex": pr["sex"], "px_per_m": px_per_m, "height_px": hpx, "facing": facing,
+                 "stature_m": pr["stature_m"], "region": pr["region"], "bmi": pr["bmi"],
                  "x": x0, "ground_y": gy, "root": rig, "joints": {k: list(v) for k, v in joints.items()},
                  "parts": {p: f"{rig}_{p}" for p in anatomy.PARTS}}
-    ref = anatomy.reference(pr["age"], pr["sex"], height_px=hpx)
-    return c.commit({"character": rig, "root_peg": root, "layers": [f"{rig}_{p}" for p in anatomy.PARTS],
-                     "height_px": round(hpx, 1), "heads_tall": ref["heads_tall"], "stature_m": ref["stature_m"],
-                     "age": pr["age"], "sex": ref["sex"], "notes": ref["notes"]})
+    ref = anatomy.reference(pr["age"], pr["sex"], height_px=hpx, region=pr["region"], bmi=pr["bmi"])
+    res = {"character": rig, "root_peg": root, "layers": [f"{rig}_{p}" for p in anatomy.PARTS],
+           "height_px": round(hpx, 1), "heads_tall": ref["heads_tall"], "stature_m": ref["stature_m"],
+           "age": pr["age"], "sex": ref["sex"], "notes": ref["notes"]}
+    for k in ("region", "caveat", "bmi"):
+        if k in ref:
+            res[k] = ref[k]
+    return c.commit(res)
 
 
 def _rig(c: Ctx, character: str) -> dict:
@@ -1878,6 +1898,12 @@ def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | Non
                                      "speed": speed, "cadence": cadence, "travel": travel, "on": on})
     rg = _rig(c, character)
     n = gait.norms(kind, rg["age"], rg["sex"])
+    # dynamic similarity (equal Froude number): a taller or shorter body than the norm's walks at
+    # speed ~ sqrt(height) and cadence ~ 1/sqrt(height)
+    froude = math.sqrt(rg.get("stature_m", anatomy.stature_m(rg["age"], rg["sex"])) /
+                       anatomy.stature_m(rg["age"], rg["sex"]))
+    n["speed"] *= froude
+    n["cadence"] /= froude
     if speed is not None:
         if cadence is None:  # step length and cadence both grow with speed (about as its square root)
             n["cadence"] *= (speed / n["speed"]) ** 0.5

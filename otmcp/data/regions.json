@@ -1,0 +1,421 @@
+{
+ "_about": "Population means from public health surveys (NHANES 2015-18, NFHS-3/5, HSE 2019, JNHNS 2018-19, NCD-RisC 2016/2020, DHS) compiled 2026-10-22. Means only; individuals vary far more than averages do.",
+ "_caveat": "Body sizes here are statistical averages for large populations, drawn from public health surveys (for example NHANES, NFHS, HSE and NCD-RisC). Real people in every country vary widely; the differences between individuals in the same place are much larger than the differences between country averages. Average height mostly reflects nutrition, health and living conditions during childhood, and it changes from one generation to the next. It is not a fixed trait of any ethnicity. Use these values as a starting point, then make each character an individual.",
+ "regions": {
+  "us": {
+   "label": "United States (all)",
+   "m": {
+    "stature_m": 1.761,
+    "sd_m": 0.075,
+    "sd_assumed": false,
+    "bmi": 29.3,
+    "shr": 52.9,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR(white)",
+    "age_band": "20-49"
+   },
+   "f": {
+    "stature_m": 1.625,
+    "sd_m": 0.069,
+    "sd_assumed": false,
+    "bmi": 29.6,
+    "shr": 53.5,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR(white)",
+    "age_band": "20-49"
+   }
+  },
+  "us_nhw": {
+   "label": "United States, non-Hispanic white",
+   "m": {
+    "stature_m": 1.78,
+    "sd_m": 0.075,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 52.9,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   },
+   "f": {
+    "stature_m": 1.645,
+    "sd_m": 0.069,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 53.5,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   }
+  },
+  "us_nhb": {
+   "label": "United States, non-Hispanic Black",
+   "m": {
+    "stature_m": 1.764,
+    "sd_m": 0.075,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 51.2,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   },
+   "f": {
+    "stature_m": 1.634,
+    "sd_m": 0.069,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 52.1,
+    "shr_note": "",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   }
+  },
+  "us_nha": {
+   "label": "United States, non-Hispanic Asian",
+   "m": {
+    "stature_m": 1.729,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NHANES1518",
+    "age_band": "20-39"
+   },
+   "f": {
+    "stature_m": 1.581,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NHANES1518",
+    "age_band": "20-39"
+   }
+  },
+  "us_hisp": {
+   "label": "United States, Hispanic",
+   "m": {
+    "stature_m": 1.712,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": 53.0,
+    "shr_note": "53.0(MexAm)",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   },
+   "f": {
+    "stature_m": 1.587,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": 53.8,
+    "shr_note": "53.8(MexAm)",
+    "sources": "NHANES1518;NHANES3_SHR",
+    "age_band": "20-39"
+   }
+  },
+  "in": {
+   "label": "India (national)",
+   "m": {
+    "stature_m": 1.65,
+    "sd_m": 0.07,
+    "sd_assumed": false,
+    "bmi": 22.4,
+    "shr": 50.7,
+    "shr_note": "",
+    "sources": "NCDR2016(1976-96);NID1997;NFHS5(BMI 15-49)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.525,
+    "sd_m": 0.066,
+    "sd_assumed": false,
+    "bmi": 22.4,
+    "shr": 50.9,
+    "shr_note": "",
+    "sources": "NCDR2016;NID1997;NFHS5",
+    "age_band": "18-49"
+   }
+  },
+  "in_wb": {
+   "label": "India, West Bengal",
+   "m": {
+    "stature_m": 1.646,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": 21.5,
+    "shr": 50.7,
+    "shr_note": "50.7(pan-India)",
+    "sources": "DEATON2008(NFHS-3);NFHS5(BMI);NID1997(SHR)",
+    "age_band": "20-45"
+   },
+   "f": {
+    "stature_m": 1.511,
+    "sd_m": 0.066,
+    "sd_assumed": true,
+    "bmi": 21.5,
+    "shr": 50.9,
+    "shr_note": "50.9(pan-India)",
+    "sources": "DEATON2008;NFHS5;NID1997",
+    "age_band": "20-45"
+   }
+  },
+  "bd": {
+   "label": "Bangladesh",
+   "m": {
+    "stature_m": 1.64,
+    "sd_m": 0.07,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 51.2,
+    "shr_note": "",
+    "sources": "NCDR2016;HALDER2016(SD,SHR occupational)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.509,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": 23.3,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;BDHS2017(BMI ever-married 15-49)",
+    "age_band": "18-49"
+   }
+  },
+  "gb": {
+   "label": "United Kingdom",
+   "m": {
+    "stature_m": 1.776,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "52(approx; no UK value verified)",
+    "sources": "NCDR2016;HSE2019",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.64,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;HSE2019",
+    "age_band": "18-49"
+   }
+  },
+  "ng": {
+   "label": "Nigeria",
+   "m": {
+    "stature_m": 1.672,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016(1976-96 avg)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.576,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": 23.3,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;NDHS2018(BMI 15-49)",
+    "age_band": "18-49"
+   }
+  },
+  "ke": {
+   "label": "Kenya",
+   "m": {
+    "stature_m": 1.71,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016(wide UI +/-3.5cm)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.59,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": 24.3,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;KDHS2022(BMI 15-49)",
+    "age_band": "18-49"
+   }
+  },
+  "br": {
+   "label": "Brazil",
+   "m": {
+    "stature_m": 1.726,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;POF2008(S)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.598,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;POF2008(S)",
+    "age_band": "18-49"
+   }
+  },
+  "nl": {
+   "label": "Netherlands",
+   "m": {
+    "stature_m": 1.826,
+    "sd_m": 0.071,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 51.6,
+    "shr_note": "",
+    "sources": "NCDR2016;CBS2021(S);FREDRIKS2005",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.689,
+    "sd_m": 0.065,
+    "sd_assumed": false,
+    "bmi": null,
+    "shr": 52.6,
+    "shr_note": "",
+    "sources": "NCDR2016;CBS2021(S);FREDRIKS2005",
+    "age_band": "18-49"
+   }
+  },
+  "mx": {
+   "label": "Mexico",
+   "m": {
+    "stature_m": 1.683,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;ENSANUT(UNVERIFIED)",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.557,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016;ENSANUT(UNVERIFIED)",
+    "age_band": "18-49"
+   }
+  },
+  "id": {
+   "label": "Indonesia",
+   "m": {
+    "stature_m": 1.633,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016",
+    "age_band": "18-49"
+   },
+   "f": {
+    "stature_m": 1.521,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": null,
+    "shr_note": "",
+    "sources": "NCDR2016",
+    "age_band": "18-49"
+   }
+  },
+  "jp": {
+   "label": "Japan",
+   "m": {
+    "stature_m": 1.716,
+    "sd_m": 0.061,
+    "sd_assumed": false,
+    "bmi": 22.2,
+    "shr": 53.9,
+    "shr_note": "53.9(age17)",
+    "sources": "JNHNS1819;MEXT2014",
+    "age_band": "18-29"
+   },
+   "f": {
+    "stature_m": 1.58,
+    "sd_m": 0.058,
+    "sd_assumed": false,
+    "bmi": 20.8,
+    "shr": 54.4,
+    "shr_note": "54.4(age17)",
+    "sources": "JNHNS1819;MEXT2014",
+    "age_band": "18-29"
+   }
+  },
+  "cn": {
+   "label": "China",
+   "m": {
+    "stature_m": 1.697,
+    "sd_m": 0.07,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": 54.1,
+    "shr_note": "54.1(1988 median)",
+    "sources": "CN_NHC2020;GB10000_1988",
+    "age_band": "18-44"
+   },
+   "f": {
+    "stature_m": 1.58,
+    "sd_m": 0.065,
+    "sd_assumed": true,
+    "bmi": null,
+    "shr": 54.5,
+    "shr_note": "54.5(1988 median)",
+    "sources": "CN_NHC2020;GB10000_1988",
+    "age_band": "18-44"
+   }
+  }
+ },
+ "aliases": {
+  "usa": "us",
+  "america": "us",
+  "american": "us",
+  "united_states": "us",
+  "india": "in",
+  "indian": "in",
+  "west_bengal": "in_wb",
+  "bengal": "in_wb",
+  "kolkata": "in_wb",
+  "bangladesh": "bd",
+  "uk": "gb",
+  "britain": "gb",
+  "england": "gb",
+  "japan": "jp",
+  "china": "cn",
+  "nigeria": "ng",
+  "kenya": "ke",
+  "brazil": "br",
+  "netherlands": "nl",
+  "dutch": "nl",
+  "mexico": "mx",
+  "indonesia": "id"
+ }
+}
