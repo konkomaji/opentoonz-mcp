@@ -21,3 +21,7 @@ OpenToonz
 
 Third-party Python packages used at runtime (installed separately, under their own licenses):
   mcp (MIT), Pillow (MIT-CMU), Shapely (BSD-3-Clause), fontTools (MIT), svgelements (MIT).
+
+Ideas credited (reimplemented from the published algorithms, no code copied):
+  p5.brush by Alejandro Campos Uribe (MIT), https://github.com/acamposuribe/p5.brush
+  - the hatching approach (angle, spacing, endpoint jitter, spacing gradient, cross passes)

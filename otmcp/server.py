@@ -1093,7 +1093,9 @@ def draw(scene: str, layer: str, frame: int, shapes: list[dict], force: bool = F
       brush{points:[[x,y,pressure 0-1],...], width:px max, color} - inked stroke with per-point pressure
     Paint/ink: fill, stroke, stroke_width (px; default from style), opacity, interior=true (thinner
     interior line), trace_line=true (iro-tore coloured line), shadow=true|{light:deg,depth:px,color}
-    (anime cel shadow; light 90=top, 135=top-left), human=false (perfect geometry), wobble (px).
+    (anime cel shadow; light 90=top, 135=top-left), or shadow={style:'hatch', spacing:px, angle:deg,
+    cross:true, gradient:0-1, jitter:0-1, width:px} for pen hatching of the shadow side (real ink strokes),
+    human=false (perfect geometry), wobble (px).
     Colours: '#rrggbb', css names or [r,g,b,a]."""
     _check_drawing_id(frame)
     c = Ctx(scene, "draw", {"layer": layer, "frame": frame, "n_shapes": len(shapes)})

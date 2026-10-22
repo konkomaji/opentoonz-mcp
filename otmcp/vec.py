@@ -294,15 +294,68 @@ def _poly(contours: list[Contour]):
     return acc
 
 
-def cel_shadow(contours: list[Contour], light_deg: float, depth: float, inset: float = 0.0):
-    """kage region = shape - shape shifted toward the light, inset so it never covers the ink line."""
+def shadow_region(contours: list[Contour], light_deg: float, depth: float, inset: float = 0.0):
+    """kage region (shapely) = shape - shape shifted toward the light, inset so it never covers the ink line."""
     from shapely import affinity
     shape = _poly(contours)
     if shape is None:
-        return []
+        return None
     a = math.radians(light_deg)
     lit = affinity.translate(shape, depth * math.cos(a), -depth * math.sin(a))
-    sh = shape.buffer(-inset).difference(lit).buffer(-0.3).buffer(0.3)
+    return shape.buffer(-inset).difference(lit).buffer(-0.3).buffer(0.3)
+
+
+def hatch(region, spacing: float, angle: float, rng: random.Random, jitter: float = 0.3, gradient: float = 0.0,
+          light_deg: float | None = None, cross: bool = False) -> list[Contour]:
+    """Hatch lines clipped exactly to a region (holes included), after p5.brush's hatch(): parallel
+    lines `spacing` px apart at `angle` deg, endpoints jittered by jitter*spacing, spacing growing by up
+    to 10%/line with `gradient` starting from the side away from the light. cross adds a pass at +70 deg."""
+    from shapely.geometry import LineString
+    if region is None or region.is_empty or spacing <= 0:
+        return []
+    out: list[Contour] = []
+    for ang in ([angle, angle + 70.0] if cross else [angle]):
+        a = math.radians(ang)
+        d = (math.cos(a), -math.sin(a))                      # line direction (canvas, +y down)
+        nrm = (-d[1], d[0])
+        cx, cy = region.centroid.x, region.centroid.y
+        x0, y0, x1, y1 = region.bounds
+        R = math.hypot(x1 - x0, y1 - y0) / 2 + spacing
+        # scan from the side away from the light so a gradient leaves the dense lines in the dark
+        sign = 1.0
+        if light_deg is not None:
+            la = math.radians(light_deg)
+            # the scan starts at centre + nrm*(-R)*sign, which must lie on the side away from the light
+            sign = 1.0 if (math.cos(la) * nrm[0] - math.sin(la) * nrm[1]) > 0 else -1.0
+        off, step = -R, spacing
+        while off <= R:
+            ox, oy = cx + nrm[0] * off * sign, cy + nrm[1] * off * sign
+            line = LineString([(ox - d[0] * R, oy - d[1] * R), (ox + d[0] * R, oy + d[1] * R)])
+            seg = line.intersection(region)
+            for g in getattr(seg, "geoms", [seg]):
+                if g.is_empty or g.geom_type != "LineString" or g.length < 0.6 * spacing:
+                    continue
+                (ax, ay), (bx, by) = g.coords[0], g.coords[-1]
+                j = jitter * spacing
+                ta, tb = rng.uniform(0, j), rng.uniform(0, j)  # endpoints only pull inward: never cross the ink
+                pa = (ax + d[0] * ta * _sgn(bx - ax, by - ay, d), ay + d[1] * ta * _sgn(bx - ax, by - ay, d))
+                pb = (bx - d[0] * tb * _sgn(bx - ax, by - ay, d), by - d[1] * tb * _sgn(bx - ax, by - ay, d))
+                if math.dist(pa, pb) >= 0.5 * spacing:
+                    out.append(Contour([pa, pb], False, False))
+            off += step
+            step *= 1 + 0.1 * max(0.0, min(1.0, gradient))
+    return out
+
+
+def _sgn(dx, dy, d):
+    return 1.0 if dx * d[0] + dy * d[1] >= 0 else -1.0
+
+
+def cel_shadow(contours: list[Contour], light_deg: float, depth: float, inset: float = 0.0):
+    """kage region as contours (flat tone)."""
+    sh = shadow_region(contours, light_deg, depth, inset)
+    if sh is None:
+        return []
     geoms = getattr(sh, "geoms", [sh])
     out = []
     for g in geoms:
@@ -367,9 +420,20 @@ def build_elements(shapes: list[dict], canvas_h: int, style_name: str | None, se
                 depth = float(cfg.get("depth", 0.22 * size))
                 light = float(cfg.get("light", 135))  # degrees, 90 = from top, 135 = top-left
                 sc = parse_color(cfg["color"]) if cfg.get("color") else styles.shadow_color(fill)
-                shadow = cel_shadow(cs, light, depth, inset=width / 2 + 0.5 * px)
-                if shadow:
-                    els.append(Element(shadow, sc, None))
+                if cfg.get("style") == "hatch":
+                    # p5.brush-style hatching instead of a flat tone; ink colour darker than the shadow tone
+                    region = shadow_region(cs, light, depth, inset=width / 2 + 1.0 * px)
+                    hc = parse_color(cfg["color"]) if cfg.get("color") else styles.shadow_color(sc)
+                    lines = hatch(region, float(cfg.get("spacing", 7.0)) * px, float(cfg.get("angle", 45.0)), rng,
+                                  float(cfg.get("jitter", 0.3)), float(cfg.get("gradient", 0.4)), light,
+                                  bool(cfg.get("cross", False)))
+                    if lines:
+                        hw = float(cfg.get("width", max(0.6, 0.45 * width / max(px, 1e-9)))) * px
+                        els.append(Element(lines, None, hc, hw))
+                else:
+                    shadow = cel_shadow(cs, light, depth, inset=width / 2 + 0.5 * px)
+                    if shadow:
+                        els.append(Element(shadow, sc, None))
             if stroke and open_:
                 els.append(Element(open_, None, stroke, width))
         elif stroke:

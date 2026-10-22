@@ -184,3 +184,30 @@ def test_exponential_and_constant():
     assert abs(curve.value_at(ks, 5) - math.sqrt(0.5)) < 1e-9
     kc = [{"frame": 0, "value": 3.0, "type": "C"}, {"frame": 10, "value": 7.0, "type": "L"}]
     assert curve.value_at(kc, 9.9) == 3.0 and curve.value_at(kc, 10) == 7.0
+
+
+def test_hatch_lines_stay_inside_and_gradient_starts_in_the_dark():
+    import random
+
+    from shapely.geometry import Point
+
+    from otmcp import vec
+    region = Point(0, 0).buffer(100)
+    lines = vec.hatch(region, 8, 45, random.Random(1), jitter=0.3, gradient=1.0, light_deg=135)
+    assert lines and all(region.buffer(1e-6).contains(Point(p)) for c in lines for p in c.pts)
+    assert lines == vec.hatch(region, 8, 45, random.Random(1), jitter=0.3, gradient=1.0, light_deg=135)
+    # light from the top-left: the densest (first) lines lie on the bottom-right
+    first, last = lines[0].pts, lines[-1].pts
+    mid = lambda p: ((p[0][0] + p[1][0]) / 2, (p[0][1] + p[1][1]) / 2)
+    assert mid(first)[0] + mid(first)[1] > mid(last)[0] + mid(last)[1]
+    cross = vec.hatch(region, 8, 45, random.Random(1), cross=True)
+    assert len(cross) > 1.6 * len(vec.hatch(region, 8, 45, random.Random(1)))
+
+
+def test_hatch_shadow_builds_ink_strokes():
+    from otmcp import vec
+    els = vec.build_elements([{"type": "circle", "x": 500, "y": 500, "r": 200, "fill": "#e0a080",
+                               "shadow": {"style": "hatch", "spacing": 10}}], 1080, "feature", 7)
+    hatch = [e for e in els if e.fill is None and e.stroke and all(not c.closed for c in e.contours)]
+    assert hatch and len(hatch[0].contours) > 5
+    assert len(vec.ink_profiles(els)) == 1 + len(hatch[0].contours)

@@ -16,7 +16,7 @@ Five ideas make it work:
 4. **Transactional safety.** Snapshots, rollback, locking and verification.
 5. **Studio practice and physics as parameters.** Not prose guidance.
 
-The system has 52 tools and 163 automated tests, 41 of which run through the installed OpenToonz.
+The system has 52 tools and 165 automated tests, 41 of which run through the installed OpenToonz.
 
 ## 1. Problem
 
@@ -176,7 +176,7 @@ Lessons accumulate across sessions from tool errors, verification problems, rend
 
 | Check | Result |
 |---|---|
-| Unit and regression tests | 163 tests passing (41 run through OpenToonz 1.8.0) |
+| Unit and regression tests | 165 tests passing (41 run through OpenToonz 1.8.0) |
 | Keyframe evaluator vs `tcomposer` | ≤ 1.5 px on every frame (ease → speed → linear chain) |
 | Physics bake vs analytic solution | ≤ 0.25 px per frame after key thinning |
 | Scene round trip (parse → write) | pixel-identical render |
