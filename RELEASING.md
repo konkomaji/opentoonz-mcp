@@ -36,3 +36,7 @@ I cut releases from `main` by pushing a version tag. Automation handles everythi
 - **PyPI:** add a trusted publisher for project `opentoonz-mcp`, with owner `konkomaji`, repository `opentoonz-mcp`, workflow `release.yml` and environment `pypi`.
 - **GitHub:** create an environment named `pypi` (optionally with required reviewers).
 - **MCP Registry:** the name `io.github.konkomaji/opentoonz-mcp` is verified by GitHub OIDC. PyPI ownership is verified by the `mcp-name:` marker in `README.md`.
+
+## If the registry step fails
+
+PyPI and the GitHub release don't depend on it. Fix `server.json` on `main` (keep the same version), then run **Actions → Publish to the MCP Registry → Run workflow**. It checks that the version is on PyPI and publishes from `main`, so the tag never moves.

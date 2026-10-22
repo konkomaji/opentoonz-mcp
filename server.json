@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.konkomaji/opentoonz-mcp",
   "title": "OpenToonz MCP",
-  "description": "Animate in OpenToonz from an AI assistant: native vector levels, xsheet timing, keyframes, physics and hand-drawn line work.",
+  "description": "Animate in OpenToonz from an AI assistant: native vector levels, xsheet timing, rigs and physics.",
   "repository": {
     "url": "https://github.com/konkomaji/opentoonz-mcp",
     "source": "github"

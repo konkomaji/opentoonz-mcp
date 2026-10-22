@@ -1,0 +1,35 @@
+name: Publish to the MCP Registry
+
+# Re-publishes server.json from main for a version that is already on PyPI
+# (for example when the registry step of a release failed). The tag stays where it is.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-registry:
+    name: Publish server.json
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # GitHub OIDC login for io.github.konkomaji/* server names
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: server.json is valid for this release
+        run: python scripts/release_check.py
+      - name: The version is on PyPI
+        run: |
+          v=$(python -c "import json; print(json.load(open('server.json'))['version'])")
+          curl -fsS "https://pypi.org/pypi/opentoonz-mcp/$v/json" >/dev/null
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: Login (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+      - name: Publish server.json
+        run: ./mcp-publisher publish

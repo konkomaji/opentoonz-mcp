@@ -28,6 +28,8 @@ def main() -> int:
         found[f"server.json package {p['identifier']}"] = p["version"]
     if a.tag:
         found["git tag"] = a.tag.removeprefix("refs/tags/").removeprefix("v")
+    if len(sj.get("description", "")) > 100:  # MCP Registry rejects longer descriptions (HTTP 422)
+        errors.append(f"server.json description is {len(sj['description'])} chars; the MCP Registry allows 100")
     if len(set(found.values())) != 1:
         errors.append("version mismatch: " + ", ".join(f"{k}={v}" for k, v in found.items()))
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

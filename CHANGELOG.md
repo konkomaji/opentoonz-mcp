@@ -7,6 +7,10 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Fixed
+
+- The MCP Registry rejected the 0.1.0 `server.json` because its description was over 100 characters. I shortened it, `release_check.py` now enforces the limit, and a manual `registry.yml` workflow re-publishes `server.json` without moving the tag.
+
 ## [0.1.0] - 2026-10-22
 
 This is the first public release. I built it so an AI assistant can work inside OpenToonz like an animator: it writes real scenes and native vector levels, and it times them on the xsheet instead of producing flat video.
