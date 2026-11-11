@@ -167,6 +167,8 @@ class SceneDoc:
         n = Node("level", {"id": lid})
         n.children.append(T.fmt(name))
         attrs = {"dpix": f"{dpi:.6f}", "dpiy": f"{dpi:.6f}"} if dpi else {"dpiType": "image"}
+        if dpi:  # raster PNGs are written by PIL with straight alpha: let OpenToonz premultiply them
+            attrs["premultiply"] = "1"  # (Level Settings > Premultiply); without it edges get a light fringe
         n.children.append(Node("info", attrs, selfclose=True))
         n.children.append(Node("path", children=[_qpath(path)]))
         self._levels_node().children.append(n)

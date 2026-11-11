@@ -13,6 +13,7 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ### Fixed
 
+- Raster levels added by `import_image` and the raster drawing tools are now flagged `premultiply="1"` in the scene. Their PNGs are written with straight alpha, and without the flag OpenToonz drew a light fringe around every cut-out piece.
 - The MCP Registry rejected the 0.1.0 `server.json` because its description was over 100 characters. I shortened it, `release_check.py` now enforces the limit, and a manual `registry.yml` workflow re-publishes `server.json` without moving the tag.
 
 ## [0.1.0] - 2026-10-22
