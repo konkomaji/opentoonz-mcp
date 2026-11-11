@@ -13,6 +13,7 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ### Fixed
 
+- `compile_vectors` (and every render) no longer fails with "could not build vector levels" or renders blank frames on OpenToonz builds that cannot load the `<layer>..svg` pattern (seen on the Linux Morevna 1.4 build). Each SVG drawing is now loaded on its own and stored at its own drawing number, the built `.pli` is checked against the expected drawings, and the toonzscript, stdout, stderr and a per-drawing `compile_report.json` are kept under `WORK/logs/`. Opt-in `OTMCP_SVG_TOPLEFT_ORIGIN=1` recentres SVG drawings for builds whose importer puts the page top-left corner at the camera centre.
 - The MCP Registry rejected the 0.1.0 `server.json` because its description was over 100 characters. I shortened it, `release_check.py` now enforces the limit, and a manual `registry.yml` workflow re-publishes `server.json` without moving the tag.
 
 ## [0.1.0] - 2026-10-22

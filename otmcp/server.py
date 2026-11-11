@@ -561,12 +561,47 @@ def _raster_drawing(shapes: list[dict], W: int, H: int, sty: str, seed: int):
 
 
 # ====================================================================== compile (vector) / render
-def _run_script(lines: list[str], tag: str) -> None:
-    TMP.mkdir(parents=True, exist_ok=True)
-    sp = TMP / f"{tag}_{int(time.time() * 1000)}.toonzscript"
+SCRIPT_LOG_DIR = WORK / "logs"
+
+
+def _run_script(lines: list[str], tag: str) -> dict:
+    """Run a toonzscript and keep the script, stdout, stderr and exit code on disk.
+    OpenToonz 1.4 can exit with code 1 after a successful script: callers check the output files."""
+    log_dir = SCRIPT_LOG_DIR / f"{tag}_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    sp = log_dir / "script.toonzscript"
     sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, timeout=600)
-    sp.unlink(missing_ok=True)
+    t0 = time.time()
+    r = subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, text=True,
+                       errors="replace", timeout=600)
+    (log_dir / "stdout.txt").write_text(r.stdout or "", encoding="utf-8")
+    (log_dir / "stderr.txt").write_text(r.stderr or "", encoding="utf-8")
+    run = {"log_dir": str(log_dir), "script": str(sp), "returncode": r.returncode,
+           "seconds": round(time.time() - t0, 1), "stdout": r.stdout or "", "stderr": r.stderr or ""}
+    (log_dir / "run.json").write_text(json.dumps({k: v for k, v in run.items() if k not in ("stdout", "stderr")},
+                                                 indent=2), encoding="utf-8")
+    return run
+
+
+def _stage_svg(src: Path, dst: Path) -> None:
+    """Copy one drawing under a plain file name for Level.load().
+    OTMCP_SVG_TOPLEFT_ORIGIN=1: the OpenToonz SVG importer (1.4) puts the SVG top-left corner at the camera
+    centre instead of centring the page; wrap the drawing in a translate(-W/2, -H/2) group to compensate."""
+    text = src.read_text(encoding="utf-8")
+    if os.environ.get("OTMCP_SVG_TOPLEFT_ORIGIN") == "1":
+        m = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', text)
+        if not m:
+            raise RuntimeError(f"{src}: no viewBox, cannot recentre for OpenToonz")
+        w, h = float(m.group(1)), float(m.group(2))
+        i = text.index(">", text.index("<svg")) + 1
+        j = text.rindex("</svg>")
+        text = text[:i] + f'<g transform="translate({-w / 2:.3f} {-h / 2:.3f})">' + text[i:j] + "</g>" + text[j:]
+    dst.write_text(text, encoding="utf-8")
+
+
+def _script_markers(text: str) -> list[list[str]]:
+    """Lines printed by the generated script as OTMCP<TAB>kind<TAB>fields..."""
+    return [ln.split("\t")[1:] for ln in text.splitlines() if ln.startswith("OTMCP\t")]
 
 
 def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> dict:
@@ -601,6 +636,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
     out_dir = TMP / f"compile_{uuid.uuid4().hex}"
     out_dir.mkdir(parents=True)
     lines = []
+    expected: dict[str, list[int]] = {}
     for i, (lname, L, _pf) in enumerate(todo):
         dst = (out_dir / f"{lname}.pli").as_posix()
         if L["mode"] == "traced":
@@ -612,16 +648,82 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
                 lines.append(f"v{i}.{prop} = {json.dumps(val)};")
             lines += [f"var l{i} = v{i}.vectorize(s{i});", f"l{i}.save({json.dumps(dst)});"]
         else:
-            src = (SVG_DIR / st["name"] / lname / f"{lname}..svg").as_posix()
-            lines += [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});", f"l{i}.save({json.dumps(dst)});"]
+            # OpenToonz 1.4 loads neither the 'name..svg' pattern nor a numbered 'name.0001.svg' file. Each drawing
+            # is copied under a plain name, loaded as a one-frame level (frame id NO_FRAME), and stored back in
+            # the output level at its own drawing number, so the xsheet cells (drawing 1, 2, ...) resolve.
+            stage = out_dir / "src" / lname
+            stage.mkdir(parents=True)
+            expected[lname] = []
+            lines.append(f"var l{i} = new Level();")
+            for f in sorted((SVG_DIR / st["name"] / lname).glob(f"{lname}.*.svg")):
+                m = re.match(rf"{re.escape(lname)}\.(\d+)\.svg$", f.name)
+                if not m:
+                    continue
+                did = int(m.group(1))
+                plain = stage / f"d{did}.svg"
+                _stage_svg(f, plain)
+                expected[lname].append(did)
+                tag = json.dumps(f"{lname}\t{did}\t{f.as_posix()}\t{plain.as_posix()}")
+                v = f"{i}_{did}"
+                lines += ["try {",
+                          f"  var s{v} = new Level();",
+                          f"  s{v}.load({json.dumps(plain.as_posix())});",
+                          f"  var im{v} = s{v}.getFrameByIndex(0);",
+                          f'  if (!im{v}) throw "no image after load";',
+                          f"  l{i}.setFrame({did}, im{v});",
+                          f'  print("OTMCP\\tframe_ok\\t" + {tag});',
+                          "} catch (e) {",
+                          f'  print("OTMCP\\tframe_error\\t" + {tag} + "\\t" + e);',
+                          "}"]
+            ltag = json.dumps(f"{lname}\t{dst}")
+            lines += ["try {",
+                      f"  l{i}.save({json.dumps(dst)});",
+                      f'  print("OTMCP\\tsave_ok\\t" + {ltag});',
+                      "} catch (e) {",
+                      f'  print("OTMCP\\tsave_error\\t" + {ltag} + "\\t" + e);',
+                      "}"]
     t0 = time.time()
-    _run_script(lines, "compile")
-    done, failed = [], []
+    run = _run_script(lines, "compile")
+    report: dict = {"run": {k: run[k] for k in ("log_dir", "script", "returncode", "seconds")}, "layers": {}}
+    for lname, L, _pf in todo:
+        report["layers"][lname] = {"mode": L["mode"], "expected_frames": expected.get(lname), "loaded": [],
+                                   "errors": [], "pli": None}
+    for mk in _script_markers(run["stdout"] + "\n" + run["stderr"]):
+        kind, rest = mk[0], mk[1:]
+        lr = report["layers"].get(rest[0]) if rest else None
+        if lr is None:
+            continue
+        if kind == "frame_ok":
+            lr["loaded"].append({"frame": int(rest[1]), "source_svg": rest[2], "loaded_svg": rest[3]})
+        elif kind == "frame_error":
+            lr["errors"].append({"frame": int(rest[1]), "source_svg": rest[2], "loaded_svg": rest[3],
+                                 "native_error": "\t".join(rest[4:])})
+        elif kind == "save_ok":
+            lr["saved"] = rest[1]
+        elif kind == "save_error":
+            lr["errors"].append({"save": rest[1], "native_error": "\t".join(rest[2:])})
+    done, failed, failed_details = [], [], {}
     for lname, L, pf in todo:
         built = out_dir / f"{lname}.pli"
+        lr = report["layers"][lname]
         if not built.exists():
             failed.append(lname)
+            failed_details[lname] = lr["errors"] or "no .pli written (see stdout/stderr in the compile log)"
             continue
+        if L["mode"] == "vector":
+            _, chk = pli.read(str(built))
+            per = {}
+            for sk in chk:
+                per[sk.frame] = per.get(sk.frame, 0) + 1
+            lr["pli"] = {"built": str(built), "bytes": built.stat().st_size, "strokes_per_frame": per}
+            want = set(expected.get(lname) or [])
+            empty = sorted(d for d in want if not per.get(d))
+            if set(per) != want or empty:
+                failed.append(lname)
+                failed_details[lname] = (f"frames in .pli {sorted(per)} != drawings {sorted(want)}"
+                                         + (f"; frames without strokes {empty}" if empty else ""))
+                continue
+            lr["pli"]["installed"] = str(pf)
         pf.parent.mkdir(parents=True, exist_ok=True)
         os.replace(built, pf)
         if L["mode"] == "traced":  # faithful trace: no stylised pressure
@@ -652,11 +754,19 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         if rep.get("profile_mismatch_frames"):
             item["brush_pressure_skipped_frames"] = rep["profile_mismatch_frames"]
         done.append(item)
+    report["compiled"], report["failed"] = done, failed_details
+    rep_text = json.dumps(report, indent=2)
+    if (out_dir / "src").exists():  # keep the SVGs OpenToonz really loaded next to the log
+        kept = Path(run["log_dir"]) / "staged_svg"
+        shutil.move(str(out_dir / "src"), kept)
+        rep_text = rep_text.replace((out_dir / "src").as_posix(), kept.as_posix())
+    (Path(run["log_dir"]) / "compile_report.json").write_text(rep_text, encoding="utf-8")
     shutil.rmtree(out_dir, ignore_errors=True)
     _save_state(st)
-    res = {"compiled": done, "seconds": round(time.time() - t0, 1)}
+    res = {"compiled": done, "seconds": round(time.time() - t0, 1), "log": run["log_dir"]}
     if failed:
         res["failed"] = failed
+        res["failed_details"] = failed_details
     if skipped:
         res["skipped_gui_edited"] = skipped
     return res
@@ -2042,7 +2152,7 @@ def _prepare(scene: str) -> tuple[Ctx, dict]:
     comp = _compile(st)
     if comp.get("failed"):
         raise RuntimeError(f"OpenToonz could not build vector levels {comp['failed']}; nothing rendered. "
-                           f"Check the drawings on those layers (validate_scene).")
+                           f"Details: {json.dumps(comp.get('failed_details'))[:1500]}. Compile log: {comp.get('log')}")
     c = Ctx(scene, "render_prepare", {}, mutate=False)
     problems = c.doc.verify(_level_file_exists)
     used = set()
