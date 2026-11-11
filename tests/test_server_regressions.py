@@ -226,3 +226,19 @@ def test_physics_tools_bake_exact_curves():
     sx = d.get_params("Col1")["sx"]["keys"]
     for f in range(0, len(samples)):
         assert abs(curve.value_at(sy, f) * curve.value_at(sx, f) - 1) < 0.02  # area preserved
+
+
+def test_bounce_start_on_ground_squashes_first_contact():
+    """#7: the frame-0 contact of a start_on_ground bounce was stretched (sy = max_stretch)."""
+    from otmcp import curve, physics
+    sc = fresh("qa_r_bounce_ground", frames=24)
+    S.add_layer(sc, "ball"); S.draw(sc, "ball", 1, CIRCLE)
+    S.set_pivot(sc, "ball", "auto", anchor="bottom")
+    S.physics_bounce(sc, "ball", 1, 150, fall_frames=6, bounces=0, start_on_ground=True)
+    d = SceneDoc.load(S._scene_file(sc))
+    sy = d.get_params("Col1")["sy"]["keys"]
+    sx = d.get_params("Col1")["sx"]["keys"]
+    mat = physics.recipes()["bounce"]["materials"]["rubber_ball"]
+    want = physics.squash_for(mat, 0, float(mat["e"]))
+    assert abs(curve.value_at(sy, 0) - want) < 0.01
+    assert abs(curve.value_at(sy, 0) * curve.value_at(sx, 0) - 1) < 0.02  # area preserved
