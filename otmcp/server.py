@@ -37,7 +37,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp import Image as McpImage
 
-from . import anatomy, assets, config, curve, gait, learn, physics, pli, plidoc, tnz, vec
+from . import anatomy, assets, bridge, config, curve, gait, learn, physics, pli, plidoc, tnz, vec
 from . import draw as drawlib
 from . import fx as fxlib
 from . import style as styles
@@ -1150,6 +1150,35 @@ INK_OPEN_NOTE = ("OpenToonz is open. It does not reload a level that changed on 
                  "see these strokes, and do it BEFORE drawing more there. Saving without reloading overwrites them.")
 
 
+LIVE_NOTE = ("Done inside the running OpenToonz: it is on screen now, and Ctrl+Z there takes it back. It is not "
+             "in the files until the scene is saved; preview_frame and render read the files, so call "
+             "opentoonz_live('save') before them.")
+
+
+@tool
+def opentoonz_live(action: str = "status") -> dict:
+    """The live link to a running OpenToonz (needs the otbridge plugin, see bridge/README.md).
+    action: 'status' (is OpenToonz connected, which scene is open, is it unsaved, which cell is the cursor on) |
+    'save' (File > Save All, so preview_frame / render / the files show what is on screen) | 'undo' | 'redo'
+    (Edit > Undo / Redo in OpenToonz). When the scene you work on is open there, stroke, read_drawing and
+    erase_stroke go through this link by themselves: strokes appear at once in the user's viewer."""
+    if action not in ("status", "save", "undo", "redo"):
+        raise ValueError("action must be status, save, undo or redo")
+    try:
+        ctx = bridge.call("context", timeout=5.0)
+    except TimeoutError as e:
+        return {"connected": True, "busy": str(e)}
+    if ctx is None:
+        return {"connected": False, "opentoonz_running": _opentoonz_running(),
+                "note": "No bridge: tools work on the files. Install bridge/otbridge.dll to draw live."}
+    ctx.pop("ok", None)
+    if action != "status":
+        bridge.call(action, timeout=120.0)
+        after = bridge.call("context", timeout=30.0) or {}
+        return {"connected": True, "done": action, "unsaved": after.get("unsaved")}
+    return {"connected": True, **ctx}
+
+
 def _ink_units(c: Ctx) -> tuple[int, int, float]:
     """Canvas size and vector units per canvas pixel (vector origin is the canvas centre, +y up)."""
     W, H = c.doc.camera_res()
@@ -1197,10 +1226,10 @@ def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float
     c = Ctx(scene, "stroke", {"layer": layer, "frame": frame, "n_strokes": len(strokes)})
     name, L = _ink_layer(c, layer)
     W, H, k = _ink_units(c)
-    doc, pf = _ink_doc(c, name)
+    live = bridge.has_open(c.sf)
     default_w = float(styles.get(L.get("style") or c.st["style"])["line"])
     taper = max(0.0, min(1.0, float(taper)))
-    items, sigs = [], []
+    items = []
     for n, s in enumerate(strokes):
         pts = s.get("points") or []
         if len(pts) < 2 or any(len(p) < 2 for p in pts):
@@ -1234,13 +1263,26 @@ def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float
                 acc.append(acc[-1] + math.dist(a[:2], b[:2]))
             ctrl = [(x, y, t * (1 - taper * (1 - math.sin(min(1.0, min(a, acc[-1] - a) / acc[-1] / 0.2) * math.pi / 2))))
                     for (x, y, t), a in zip(ctrl, acc)]
-        ctrl = [(x, y, max(0.02, t)) for x, y, t in ctrl]
-        items.append({"points": ctrl, "loop": closed, "style": doc.style_for(drawlib.color(s.get("color", "#111111")))})
-    idx = doc.append(int(frame), items)
+        # The .pli stores 1/16384 of a unit, but the OpenToonz GUI cuts what it loads to 1/128 (0.018 px at
+        # 120 dpi; measured). On that coarser grid a stroke keeps its exact points through any load and save.
+        ctrl = [(round(x * 128) / 128, round(y * 128) / 128, max(0.02, t)) for x, y, t in ctrl]
+        items.append({"points": ctrl, "loop": closed, "color": drawlib.color(s.get("color", "#111111"))})
+    sigs = [_ink_sig(it["points"]) for it in items]
+    if live:
+        # OpenToonz has this scene open: its memory is the truth, so the strokes go into the open drawing.
+        # They show at once, they are one undo step there, and the files change when the user saves.
+        r = bridge.call("stroke", level=name, drawing=int(frame),
+                        strokes=[{"points": [list(p) for p in it["points"]], "loop": it["loop"],
+                                  "color": list(it["color"])} for it in items])
+        L.setdefault("ink_sigs", {}).setdefault(str(int(frame)), []).extend(sigs)
+        L["drawings"].setdefault(str(int(frame)), [])
+        return c.commit({"layer": name, "drawing": int(frame), "strokes": r["indices"],
+                         "strokes_in_drawing": r["strokes_in_drawing"], "live": LIVE_NOTE})
+    doc, pf = _ink_doc(c, name)
+    idx = doc.append(int(frame), [{"points": it["points"], "loop": it["loop"], "style": doc.style_for(it["color"])}
+                                  for it in items])
     pf.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(pf))
-    written = doc.strokes(int(frame))
-    sigs = [_ink_sig(written[i]["points"]) for i in idx]
     L.setdefault("ink_sigs", {}).setdefault(str(int(frame)), []).extend(sigs)
     L["drawings"].setdefault(str(int(frame)), [])
     msg = _retime(c, name)
@@ -1250,7 +1292,8 @@ def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float
         c.warnings.append(f"drawing {frame} is after the scene end ({c.st['frames']}); extend with set_scene_settings")
     if _opentoonz_running():
         c.warnings.append(INK_OPEN_NOTE)
-    return c.commit({"layer": name, "drawing": int(frame), "strokes": idx, "strokes_in_drawing": len(written)})
+    return c.commit({"layer": name, "drawing": int(frame), "strokes": idx,
+                     "strokes_in_drawing": len(doc.strokes(int(frame)))})
 
 
 @tool
@@ -1265,13 +1308,20 @@ def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> di
     L = c.layer(name)
     if L["mode"] not in ("ink", "vector", "traced"):
         raise ValueError(f"layer '{name}' is a {L['mode']} layer; only vector levels have strokes")
-    doc, _pf = _ink_doc(c, name, must_exist=True)
     W, H, k = _ink_units(c)
-    palette = doc.styles()
+    live = bridge.has_open(c.sf)
+    if live:  # what is on screen in OpenToonz, saved or not
+        r = bridge.call("read", level=name, drawing=int(frame))
+        found = [dict(s, points=[tuple(p) for p in s["points"]]) for s in r["strokes"]]
+        palette = {s["style"]: tuple(s["color"]) for s in found if s.get("color")}
+        on_level = None
+    else:
+        doc, _pf = _ink_doc(c, name, must_exist=True)
+        found, palette, on_level = doc.strokes(int(frame)), doc.styles(), doc.frames()
     mine = set(L.get("ink_sigs", {}).get(str(int(frame)), []))
     max_points = max(2, min(200, int(max_points)))
     out = []
-    for s in doc.strokes(int(frame)):
+    for s in found:
         line = plidoc.sample(s["points"], 4)
         peak = max(t for _, _, t in line) or 1.0
         step = max(1, math.ceil((len(line) - 1) / (max_points - 1)))
@@ -1284,10 +1334,12 @@ def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> di
                     "width": round(2 * peak / k, 2), "closed": s["loop"],
                     "bbox": [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)],
                     "points": px})
-    res = {"layer": name, "mode": L["mode"], "drawing": int(frame), "drawings_on_level": doc.frames(),
-           "strokes": out, "canvas": [W, H]}
-    if int(frame) not in doc.frames():
-        res["note"] = f"drawing {frame} does not exist on this level yet"
+    res = {"layer": name, "mode": L["mode"], "drawing": int(frame), "strokes": out, "canvas": [W, H],
+           "source": "OpenToonz (live, includes unsaved strokes)" if live else "level file"}
+    if on_level is not None:
+        res["drawings_on_level"] = on_level
+        if int(frame) not in on_level:
+            res["note"] = f"drawing {frame} does not exist on this level yet"
     return c.commit(res)
 
 
@@ -1297,11 +1349,21 @@ def erase_stroke(scene: str, layer: str, frame: int, indices: list[int]) -> dict
     the call; the remaining strokes are renumbered. A stroke that borders a painted area is refused."""
     c = Ctx(scene, "erase_stroke", {"layer": layer, "frame": frame, "indices": indices})
     name, L = _ink_layer(c, layer)
-    doc, pf = _ink_doc(c, name, must_exist=True)
-    before = doc.strokes(int(frame))
     want = sorted({int(i) for i in indices}, reverse=True)
     if not want:
         raise ValueError("indices is empty")
+    if bridge.has_open(c.sf):  # OpenToonz erases in the open drawing and rebuilds any paint itself
+        before = bridge.call("read", level=name, drawing=int(frame))["strokes"]
+        r = bridge.call("erase", level=name, drawing=int(frame), indices=want)
+        sigs = L.get("ink_sigs", {}).get(str(int(frame)), [])
+        for i in want:
+            g = _ink_sig([tuple(p) for p in before[i]["points"]]) if i < len(before) else None
+            if g in sigs:
+                sigs.remove(g)
+        return c.commit({"layer": name, "drawing": int(frame), "erased": sorted(want),
+                         "strokes_in_drawing": r["strokes_in_drawing"], "live": LIVE_NOTE})
+    doc, pf = _ink_doc(c, name, must_exist=True)
+    before = doc.strokes(int(frame))
     for i in want:
         doc.remove(int(frame), i)
     doc.save(str(pf))

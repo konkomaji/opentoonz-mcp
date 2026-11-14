@@ -50,7 +50,7 @@ opentoonz-mcp = "otmcp.server:main"
 packages = ["otmcp"]
 
 [tool.hatch.build.targets.sdist]
-include = ["otmcp", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "server.json", "pyproject.toml"]
+include = ["otmcp", "tests", "docs", "bridge/*.cpp", "bridge/*.json", "bridge/*.py", "bridge/*.md", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "server.json", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

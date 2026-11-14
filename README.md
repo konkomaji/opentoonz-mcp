@@ -50,7 +50,7 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 | 🎥 **Camera work** | Pans with parallax layers, exponential trucks, impact and trauma shake, and a smoothed camera follow. It warns before a move reveals empty background or pans fast enough to strobe. |
 | 🖼️ **Bring your own art** | Import SVG files as editable shapes. Place images, or let OpenToonz's own vectorizer trace them into vector levels. Build a reusable **parts library** (model sheets with variants such as mouth charts). |
 | 🔁 **Works with your hand edits** | The scene file is the source of truth. Retime or redraw in OpenToonz, save, and the assistant picks up your changes instead of overwriting them. |
-| 🤝 **Draw on the same drawing** | An **ink layer** is one vector level you and the assistant both draw on. `read_drawing` shows it every stroke that is there, yours included. `stroke` adds pen lines with pressure on top, straight into the `.pli`, without touching your lines or your paint. `erase_stroke` takes lines out. Nothing is regenerated, and your edits never lock the layer. |
+| 🤝 **Draw on the same drawing** | An **ink layer** is one vector level you and the assistant both draw on. `read_drawing` shows it every stroke that is there, yours included. `stroke` adds pen lines with pressure on top, straight into the `.pli`, without touching your lines or your paint. `erase_stroke` takes lines out. Nothing is regenerated, and your edits never lock the layer. With the optional **[otbridge plugin](bridge/README.md)** this is live: strokes appear in your open OpenToonz window as they are drawn, the assistant sees your unsaved strokes, and Ctrl+Z takes its lines back. |
 | 🛡️ **Safe by design** | Every edit takes a snapshot first. Failed calls roll back automatically. `undo` restores scenes and drawings exactly, writes are verified before they land, and per-scene locks protect against concurrent writers. |
 | 🧠 **Remembers and improves** | It keeps notes and a journal per scene. Errors, render reviews and your feedback become ranked lessons that later sessions see, and `tune_style` makes preferred defaults permanent. |
 
@@ -135,7 +135,7 @@ A good session looks like a studio pipeline:
 7. `camera_move`, then `apply_look` for a studio finish
 8. `validate_scene`, `contact_sheet`, `render`
 
-The full list of 56 tools with every parameter is in **[docs/TOOLS.md](docs/TOOLS.md)**.
+The full list of 57 tools with every parameter is in **[docs/TOOLS.md](docs/TOOLS.md)**.
 
 ## How it works
 
@@ -156,7 +156,7 @@ The details are in [docs/WHITEPAPER.md](docs/WHITEPAPER.md), [docs/ARCHITECTURE.
 - **Windows first.** It is developed and tested on Windows with OpenToonz 1.8. Other platforms may work with `OPENTOONZ_HOME` set, but they are untested.
 - **Drawing comes from shapes, paths, brush strokes and imported art.** There is no built-in image generator. Bring your own art, or have the assistant compose it from paths and parts.
 - **Redrawing replaces your edits on that layer.** If you redraw, in the GUI, a layer the assistant drew, the assistant won't overwrite it unless told to (`force=true`).
-- **Ink layers are not live yet.** OpenToonz does not reload a level that changed on disk. After the assistant draws, use File > Revert Scene to see it, and save your own strokes before asking it to draw. Ink strokes are lines only: paint areas in OpenToonz, or use a vector layer.
+- **Live drawing needs the otbridge plugin, and it exists for one build so far.** It is compiled for the official OpenToonz 1.8.0 Windows build and refuses to start in any other. Without it, OpenToonz does not reload a level that changed on disk: after the assistant draws, use File > Revert Scene to see it, and save your own strokes before asking it to draw. Ink strokes are lines only: paint areas in OpenToonz, or use a vector layer.
 - **Render tests need a local OpenToonz.** CI runs the unit tests only.
 
 ## Contributing
