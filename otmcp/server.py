@@ -37,7 +37,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp import Image as McpImage
 
-from . import anatomy, assets, config, curve, gait, learn, physics, pli, tnz, vec
+from . import anatomy, assets, config, curve, gait, learn, physics, pli, plidoc, tnz, vec
 from . import draw as drawlib
 from . import fx as fxlib
 from . import style as styles
@@ -63,7 +63,11 @@ mcp = FastMCP("opentoonz", instructions=(
     "scene_context. After each render: inspect contact_sheet, record insights with learn_lesson, ask the "
     "user for feedback (feedback tool) and tune_style when a default should change. Workflow like a studio: "
     "notes/story (add_note) -> layout (layers, pegs, camera) -> key drawings -> inbetween -> timing -> "
-    "camera -> validate_scene -> render."))
+    "camera -> validate_scene -> render. To draw WITH the user on one drawing, use an ink layer "
+    "(add_layer mode='ink', or ink_layer on a vector layer): read_drawing shows every stroke on the level, "
+    "theirs included; stroke adds pen lines on top without touching them; erase_stroke removes lines. Draw a "
+    "few strokes, look with preview_frame, then continue. Draw through these tools; do not write scripts "
+    "that generate drawings."))
 
 KEY_TAGS = {"x": "x", "y": "y", "z": "z", "rotation": "rot", "scale": "sc", "scale_x": "sx",
             "scale_y": "sy", "shear_x": "shx", "shear_y": "shy", "stack_order": "so"}
@@ -123,7 +127,7 @@ def _now() -> str:
 
 
 def _level_path(st: dict, layer: str, mode: str) -> str:
-    return f"+drawings/{st['name']}/{layer}.pli" if mode in ("vector", "traced") \
+    return f"+drawings/{st['name']}/{layer}.pli" if mode in ("vector", "traced", "ink") \
         else f"+drawings/{st['name']}/{layer}..png"
 
 
@@ -367,7 +371,7 @@ class Ctx:
         lv = self.doc.level_by_path(L["level_path"])
         if lv is None:
             return self.doc.add_level(layer, L["level_path"],
-                                      None if L["mode"] in ("vector", "traced") else self.doc.dpi())
+                                      None if L["mode"] in ("vector", "traced", "ink") else self.doc.dpi())
         return lv["id"]
 
     # ---- commit
@@ -394,7 +398,7 @@ class Ctx:
                     L["col_hint"] = ci
             _save_state(self.st)
             pending = {f"+drawings/{self.name}/{n}.pli" for n, L in self.st["layers"].items()
-                       if L["mode"] in ("vector", "traced")}
+                       if L["mode"] in ("vector", "traced", "ink")}
             soft = [p for p in problems if "file missing" in p and not any(x in p for x in pending)]
             result["verify"] = soft if soft else "ok"
             if any(L.get("dirty") for L in self.st["layers"].values()):
@@ -492,6 +496,9 @@ def _retime(c: Ctx, layer: str) -> str | None:
 
 def _write_drawing(c: Ctx, layer: str, did: int, shapes: list[dict], force: bool = False) -> None:
     L = c.layer(layer)
+    if L["mode"] == "ink":
+        raise ValueError(f"layer '{layer}' is an ink layer: it holds hand strokes, not shapes. Use stroke / "
+                         f"erase_stroke / read_drawing on it, or draw shapes on a vector layer.")
     if L["mode"] in ("vector", "traced") and L.get("gui_edited") and not force:
         raise RuntimeError(f"layer '{layer}' drawings were edited in OpenToonz; redrawing would discard those "
                            f"edits. Pass force=true to overwrite, or draw on a new layer.")
@@ -996,7 +1003,8 @@ def set_scene_settings(scene: str, frames: int | None = None, fps: float | None 
 def add_layer(scene: str, layer: str, mode: str = "vector", style: str | None = None, parent: str = "Table",
               boil: bool = False) -> dict:
     """Add a column with its own drawing level. Later layers are drawn ON TOP.
-    mode: 'vector' (native OpenToonz vector .pli, editable in GUI, pressure lines) | 'raster' (PNG).
+    mode: 'vector' (shapes -> native OpenToonz vector .pli, editable in GUI, pressure lines) | 'ink' (a vector
+    .pli you and the user both draw on, stroke by stroke: stroke / read_drawing / erase_stroke) | 'raster' (PNG).
     style: override scene style for this layer (e.g. 'clean' for BG, 'sketch' for effects).
     parent: 'Table', a peg or another layer. boil: hand-drawn line boil on held drawings."""
     if style and style not in styles.STYLES:
@@ -1006,14 +1014,14 @@ def add_layer(scene: str, layer: str, mode: str = "vector", style: str | None = 
     clash = [n for n in c.st["layers"] if n.lower() == name.lower()]
     if clash:  # Windows paths are case-insensitive: 'Ball' and 'ball' would share files
         raise ValueError(f"layer '{clash[0]}' already exists (names are case-insensitive)")
-    if mode not in ("vector", "raster", "traced"):
-        raise ValueError("mode must be vector, raster or traced")
+    if mode not in ("vector", "raster", "traced", "ink"):
+        raise ValueError("mode must be vector, ink, raster or traced")
     c.st["layers"][name] = {"mode": mode, "style": style, "drawings": {}, "timing": "auto", "boil": boil,
                             "level_path": _level_path(c.st, name, mode), "dirty": False}
     old = c.doc.level_by_path(_level_path(c.st, name, mode))
     lid = old["id"] if old else c.doc.add_level(name, _level_path(c.st, name, mode),
-                                                 None if mode in ("vector", "traced") else c.doc.dpi())
-    ci = c.doc.add_column(lid, name)
+                                                 None if mode in ("vector", "traced", "ink") else c.doc.dpi())
+    ci = c.doc.add_column(lid, name)  # an ink level file is written by its first stroke
     if parent and parent.lower() != "table":
         c.doc.set_parent(f"Col{ci + 1}", c.stage_id(parent))
     return c.commit({"layer": name, "column": ci + 1, "mode": mode})
@@ -1085,7 +1093,7 @@ def delete_layer(scene: str, layer: str) -> dict:
     if lv and not any(lv["id"] in c.doc.column_level_ids(k) for k in range(len(c.doc.columns()))):
         c.doc.remove_level(lv["id"])
     shutil.rmtree(SVG_DIR / c.name / name, ignore_errors=True)
-    if L["mode"] in ("vector", "traced"):
+    if L["mode"] in ("vector", "traced", "ink"):
         _pli_file(c.st, name).unlink(missing_ok=True)
     else:
         for f in (PROJECT / "drawings" / c.name).glob(f"{name}.*.png"):
@@ -1135,6 +1143,202 @@ def draw_many(scene: str, layer: str, drawings: list[dict], force: bool = False)
     if msg:
         c.warnings.append(msg)
     return c.commit({"layer": name, "drawings": [int(d["frame"]) for d in drawings]})
+
+
+# ====================================================================== tools: ink (shared hand-drawn levels)
+INK_OPEN_NOTE = ("OpenToonz is open. It does not reload a level that changed on disk: use File > Revert Scene to "
+                 "see these strokes, and do it BEFORE drawing more there. Saving without reloading overwrites them.")
+
+
+def _ink_units(c: Ctx) -> tuple[int, int, float]:
+    """Canvas size and vector units per canvas pixel (vector origin is the canvas centre, +y up)."""
+    W, H = c.doc.camera_res()
+    return W, H, vec.STAGE_INCH / c.doc.dpi()
+
+
+def _ink_sig(points: list) -> str:
+    """Identity of a stroke from its geometry. It survives an OpenToonz save, which keeps these integers."""
+    return format(zlib.crc32(",".join(f"{round(x * 16384)},{round(y * 16384)}" for x, y, _ in points).encode()),
+                  "08x")
+
+
+def _ink_doc(c: Ctx, layer: str, must_exist: bool = False) -> tuple[plidoc.PliDoc, Path]:
+    pf = _pli_file(c.st, layer)
+    if pf.exists():
+        return plidoc.PliDoc.load(str(pf)), pf
+    if must_exist:
+        raise ValueError(f"layer '{layer}' has no vector level on disk yet")
+    return plidoc.PliDoc.new(), pf
+
+
+def _ink_layer(c: Ctx, layer: str) -> tuple[str, dict]:
+    name = _safe(layer)
+    L = c.layer(name)
+    if L["mode"] != "ink":
+        raise ValueError(f"layer '{name}' is a {L['mode']} layer. Strokes go on an ink layer: add_layer(mode='ink'), "
+                         f"or ink_layer('{name}') to turn this vector layer into one.")
+    return name, L
+
+
+@tool
+def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float = 0.6) -> dict:
+    """Draw by hand on an ink layer: each stroke is one pen line, written straight into the OpenToonz vector
+    level on top of what is already there (yours or the user's). Nothing is regenerated or overwritten.
+
+    strokes: [{"points": [[x, y] or [x, y, pressure 0-1], ...], "width": px at full pressure (default: the
+    style's line), "color": '#rrggbb', "closed": false, "smooth": true}]. Points are canvas px (origin
+    top-left); the line passes through every point (smooth=false joins them with straight segments).
+    Without pressure values the ends are tapered like a pen lift (taper 0 = none, 1 = to a hair).
+    Work like an artist: read_drawing / preview_frame to look, add a few strokes, look again.
+    Lines only: painted areas are made in OpenToonz, or with draw on a vector layer."""
+    _check_drawing_id(frame)
+    if not strokes:
+        raise ValueError("strokes is empty")
+    c = Ctx(scene, "stroke", {"layer": layer, "frame": frame, "n_strokes": len(strokes)})
+    name, L = _ink_layer(c, layer)
+    W, H, k = _ink_units(c)
+    doc, pf = _ink_doc(c, name)
+    default_w = float(styles.get(L.get("style") or c.st["style"])["line"])
+    taper = max(0.0, min(1.0, float(taper)))
+    items, sigs = [], []
+    for n, s in enumerate(strokes):
+        pts = s.get("points") or []
+        if len(pts) < 2 or any(len(p) < 2 for p in pts):
+            raise ValueError(f"stroke {n}: needs at least 2 points, each [x, y] or [x, y, pressure]")
+        if any(not all(math.isfinite(float(v)) for v in p[:3]) or abs(float(p[0])) > 20 * W or abs(float(p[1])) > 20 * H
+               for p in pts):
+            raise ValueError(f"stroke {n}: a point is far outside the canvas ({W}x{H})")
+        width = float(s.get("width", default_w))
+        if not 0 < width <= 400:
+            raise ValueError(f"stroke {n}: width must be within 0..400 px")
+        closed, has_p = bool(s.get("closed")), any(len(p) > 2 for p in pts)
+        raw = [((float(p[0]) - W / 2) * k, (H / 2 - float(p[1])) * k,
+                width / 2 * k * (max(0.0, min(1.0, float(p[2]))) if len(p) > 2 else 1.0)) for p in pts]
+        raw = [p for i, p in enumerate(raw) if i == 0 or p[:2] != raw[i - 1][:2]]
+        if len(raw) < 2:
+            raise ValueError(f"stroke {n}: needs at least 2 different points")
+        if s.get("smooth", True) and len(raw) > 2:
+            ctrl = plidoc.through_points(raw, closed)
+        else:  # straight segments, cut fine enough for the taper to have a body between the two ends
+            if closed and raw[0][:2] != raw[-1][:2]:
+                raw.append(raw[0])
+            total = sum(math.dist(a[:2], b[:2]) for a, b in zip(raw, raw[1:]))
+            ctrl = [raw[0]]
+            for a, b in zip(raw, raw[1:]):
+                m = max(1, math.ceil(10 * math.dist(a[:2], b[:2]) / total))
+                for j in range(1, 2 * m + 1):
+                    ctrl.append(tuple(u + (v - u) * j / (2 * m) for u, v in zip(a, b)))
+        if taper and not has_p and not closed:  # pen lift: both ends thin over a fifth of the line
+            acc = [0.0]
+            for a, b in zip(ctrl, ctrl[1:]):
+                acc.append(acc[-1] + math.dist(a[:2], b[:2]))
+            ctrl = [(x, y, t * (1 - taper * (1 - math.sin(min(1.0, min(a, acc[-1] - a) / acc[-1] / 0.2) * math.pi / 2))))
+                    for (x, y, t), a in zip(ctrl, acc)]
+        ctrl = [(x, y, max(0.02, t)) for x, y, t in ctrl]
+        items.append({"points": ctrl, "loop": closed, "style": doc.style_for(drawlib.color(s.get("color", "#111111")))})
+    idx = doc.append(int(frame), items)
+    pf.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(pf))
+    written = doc.strokes(int(frame))
+    sigs = [_ink_sig(written[i]["points"]) for i in idx]
+    L.setdefault("ink_sigs", {}).setdefault(str(int(frame)), []).extend(sigs)
+    L["drawings"].setdefault(str(int(frame)), [])
+    msg = _retime(c, name)
+    if msg:
+        c.warnings.append(msg)
+    if int(frame) > c.st["frames"]:
+        c.warnings.append(f"drawing {frame} is after the scene end ({c.st['frames']}); extend with set_scene_settings")
+    if _opentoonz_running():
+        c.warnings.append(INK_OPEN_NOTE)
+    return c.commit({"layer": name, "drawing": int(frame), "strokes": idx, "strokes_in_drawing": len(written)})
+
+
+@tool
+def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> dict:
+    """Look at a vector drawing as strokes, the user's included: what is on the level file right now.
+    Works on ink and vector layers. Each stroke: index (drawing order, later = on top), by ('mcp' = drawn with
+    stroke, 'other' = the user in OpenToonz or shapes), color, width px, closed, bbox [x0, y0, x1, y1] and
+    points [[x, y, pressure], ...] along the line (canvas px, thinned to max_points). Use it before adding to
+    someone's drawing, then preview_frame to see the result."""
+    c = Ctx(scene, "read_drawing", {"layer": layer, "frame": frame}, mutate=False)
+    name = _safe(layer)
+    L = c.layer(name)
+    if L["mode"] not in ("ink", "vector", "traced"):
+        raise ValueError(f"layer '{name}' is a {L['mode']} layer; only vector levels have strokes")
+    doc, _pf = _ink_doc(c, name, must_exist=True)
+    W, H, k = _ink_units(c)
+    palette = doc.styles()
+    mine = set(L.get("ink_sigs", {}).get(str(int(frame)), []))
+    max_points = max(2, min(200, int(max_points)))
+    out = []
+    for s in doc.strokes(int(frame)):
+        line = plidoc.sample(s["points"], 4)
+        peak = max(t for _, _, t in line) or 1.0
+        step = max(1, math.ceil((len(line) - 1) / (max_points - 1)))
+        keep = line[::step] + ([line[-1]] if (len(line) - 1) % step else [])
+        px = [[round(x / k + W / 2, 1), round(H / 2 - y / k, 1), round(t / peak, 2)] for x, y, t in keep]
+        xs, ys = [x / k + W / 2 for x, _, _ in line], [H / 2 - y / k for _, y, _ in line]
+        col = palette.get(s["style"])
+        out.append({"index": s["index"], "by": "mcp" if _ink_sig(s["points"]) in mine else "other",
+                    "color": "#%02x%02x%02x" % col[:3] if col else f"style {s['style']}",
+                    "width": round(2 * peak / k, 2), "closed": s["loop"],
+                    "bbox": [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)],
+                    "points": px})
+    res = {"layer": name, "mode": L["mode"], "drawing": int(frame), "drawings_on_level": doc.frames(),
+           "strokes": out, "canvas": [W, H]}
+    if int(frame) not in doc.frames():
+        res["note"] = f"drawing {frame} does not exist on this level yet"
+    return c.commit(res)
+
+
+@tool
+def erase_stroke(scene: str, layer: str, frame: int, indices: list[int]) -> dict:
+    """Remove strokes from a drawing on an ink layer by index (from read_drawing). Indices are those BEFORE
+    the call; the remaining strokes are renumbered. A stroke that borders a painted area is refused."""
+    c = Ctx(scene, "erase_stroke", {"layer": layer, "frame": frame, "indices": indices})
+    name, L = _ink_layer(c, layer)
+    doc, pf = _ink_doc(c, name, must_exist=True)
+    before = doc.strokes(int(frame))
+    want = sorted({int(i) for i in indices}, reverse=True)
+    if not want:
+        raise ValueError("indices is empty")
+    for i in want:
+        doc.remove(int(frame), i)
+    doc.save(str(pf))
+    gone = [_ink_sig(before[i]["points"]) for i in want]
+    sigs = L.get("ink_sigs", {}).get(str(int(frame)), [])
+    for g in gone:
+        if g in sigs:
+            sigs.remove(g)
+    if _opentoonz_running():
+        c.warnings.append(INK_OPEN_NOTE)
+    return c.commit({"layer": name, "drawing": int(frame), "erased": sorted(want),
+                     "strokes_in_drawing": len(before) - len(want)})
+
+
+@tool
+def ink_layer(scene: str, layer: str) -> dict:
+    """Turn a vector layer into an ink layer, so you and the user can both keep drawing on it. Its level file
+    becomes the only truth: the shapes it was built from are dropped, it is never recompiled, and edits made in
+    OpenToonz no longer lock it. After this use stroke / read_drawing / erase_stroke; draw no longer applies."""
+    c = Ctx(scene, "ink_layer", {"layer": layer})
+    name = _safe(layer)
+    L = c.layer(name)
+    if L["mode"] == "ink":
+        return c.commit({"layer": name, "mode": "ink", "note": "already an ink layer"})
+    if L["mode"] != "vector":
+        raise ValueError(f"only vector layers can become ink layers; '{name}' is {L['mode']}")
+    if L.get("dirty") and not L.get("gui_edited"):
+        comp = _compile(c.st, only=[name])
+        if comp.get("failed"):
+            raise RuntimeError(f"OpenToonz could not build '{name}'; it stays a vector layer")
+    doc, _pf = _ink_doc(c, name)
+    L["mode"], L["dirty"] = "ink", False
+    L["drawings"] = {str(f): [] for f in doc.frames() if f < BOIL_BASE}
+    for key in ("gui_edited", "pli_hash"):
+        L.pop(key, None)
+    shutil.rmtree(SVG_DIR / c.name / name, ignore_errors=True)
+    return c.commit({"layer": name, "mode": "ink", "drawings": sorted(int(f) for f in L["drawings"])})
 
 
 @tool
@@ -1488,6 +1692,8 @@ def import_image(scene: str, layer: str, path: str, frame: int = 1, box: list[fl
     L = c.layer(name)
     if L["mode"] == "vector":
         raise ValueError("vector layers are drawn from shapes; use a 'raster' or 'traced' layer for images")
+    if L["mode"] == "ink":
+        raise ValueError("ink layers hold strokes; use a 'raster' or 'traced' layer for images")
     if L["mode"] == "traced":
         if trace and trace not in ("outline", "centerline"):
             raise ValueError("trace must be 'outline' or 'centerline'")
@@ -2057,6 +2263,9 @@ def _prepare(scene: str) -> tuple[Ctx, dict]:
         raise RuntimeError(f"OpenToonz could not build vector levels {comp['failed']}; nothing rendered. "
                            f"Check the drawings on those layers (validate_scene).")
     c = Ctx(scene, "render_prepare", {}, mutate=False)
+    if not any(cell for ci in range(len(c.doc.columns())) for cell in c.doc.column_cells(ci)):
+        # with no exposed drawing the scene has no frames, and tcomposer waits forever instead of failing
+        raise ValueError("nothing is drawn yet: no layer has a drawing on the xsheet, so there is nothing to render")
     problems = c.doc.verify(_level_file_exists)
     used = set()
     for ci in range(len(c.doc.columns())):

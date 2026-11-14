@@ -3,7 +3,7 @@
 This is how I structured the server, and the rules I follow when I change it. The guiding idea: the assistant may only ever touch an OpenToonz scene through a transaction it can undo, and everything it writes must be something OpenToonz itself would write.
 
 ```
-MCP client ──stdio──► otmcp.server (FastMCP, 52 tools)
+MCP client ──stdio──► otmcp.server (FastMCP, 56 tools)
                           │  every scene-changing call: lock → snapshot → edit → verify → write → journal
           ┌───────────────┼──────────────────┬──────────────────┬──────────────┐
           ▼               ▼                  ▼                  ▼              ▼
@@ -32,6 +32,7 @@ MCP client ──stdio──► otmcp.server (FastMCP, 52 tools)
 | `art.py` | SVG path sampling (svgelements), brush pressure profiles, and an affine shape transform that keeps primitive types when it can. |
 | `vec.py` | Turns shapes into contours, applies the humanize step and the cel shadow (shapely), builds ink+paint elements, and writes SVG at vector scale or a PNG preview. Also produces ink stroke profiles. |
 | `pli.py` | `.pli` reader (v5.7 and later). `pressure_patch` rewrites thickness bytes in place (periodic on loops, per-frame seeds, atomic write). |
+| `plidoc.py` | `.pli` stroke editor for ink layers. Keeps every tag as raw bytes, resolves GROUP and IMAGE child offsets to tag objects on load and writes them again on save, so untouched data round-trips byte for byte. Adds strokes and drawings, adds palette colours, removes strokes that no painted region depends on. Also fits a quadratic chain through points. |
 | `assets.py` | Parts library (global, with variants), SVG file to shapes, image placement. |
 | `physics.py` | Bounce, jump, second-order springs, SmoothDamp, trauma shake, RDP key thinning, blink and lip-sync charts. Reads `data/recipes.json`. |
 | `anatomy.py` | Human proportions by age, sex and region (Drillis-Contini, de Leva, CDC/NHANES; regional means in `data/regions.json`), mass split and centre of mass, the 16-part side-view rig (joints, parents, drawn shapes, mirroring). |
@@ -64,6 +65,11 @@ MCP client ──stdio──► otmcp.server (FastMCP, 52 tools)
 | `vector` | shapes → `svg/<scene>/<layer>/<layer>.NNNN.svg` (+ `.prof.json` brush profiles) | OpenToonz SVG import, then pressure patch |
 | `traced` | images → `svg/<scene>/<layer>/<layer>.NNNN.png` | OpenToonz Outline/Centerline vectorizer |
 | `raster` | shapes and images → `drawings/<scene>/<layer>.NNNN.png` | written directly |
+| `ink` | the `.pli` itself: `drawings/<scene>/<layer>.pli` | `plidoc` appends strokes in place; never compiled |
+
+An ink layer has no second copy of its drawings. The level file is the only truth, so the user and the assistant can both add to one drawing, and a GUI edit never locks the layer. The state keeps only a geometry checksum of each stroke the assistant wrote, which is how `read_drawing` tells its own strokes from the user's. `ink_layer` converts a vector layer by dropping its shapes and SVG sources.
+
+The level file of an ink layer appears with its first stroke. OpenToonz does not watch level files, so strokes written while the scene is open in the GUI show up after File > Revert Scene.
 
 Boil variants use drawing ids `d + 1000·v` (v = 1, 2). Drawing numbers are therefore limited to 1..999.
 

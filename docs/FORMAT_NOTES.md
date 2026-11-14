@@ -79,4 +79,13 @@ Facts the MCP depends on. Every item was checked in two ways: against the OpenTo
   - P0 (2 dynamic ints) + u8 thickness
   - then per quadratic: d1 + thick1, d2 + thick2
 - Dynamic ints are sign-magnitude. Real coordinate = int / precisionScale.
+- More tag ids: 14 = group, 16 = image, 17 = colour, 20 = style, 21 = intersection data (the painted regions).
+- **Children are named by absolute file offset.** A group (type byte 1 = strokes, 5 = the palette) and an image tag list the offsets of their child tags, in the current dynamic width. Inserting a byte anywhere moves every later offset, so a writer has to resolve them and write them again. `plidoc.py` does this.
+- A drawing is: image-begin (u16 number, u8 letter), precision scale, then colour, stroke and group tags, then the intersection data, then the image tag (same number and letter, then the child offsets). The reader starts every drawing at dynamic width 2, so the writer puts a set-data tag before the first dynamic value of each drawing.
+- A colour tag (`01 03` = solid, stroke colour, then the style id) applies to every stroke after it, groups included.
+- Palette: style tags listed by one palette group. The first style tag (id 0) holds the page names. A solid colour is: u16 id, u16 page, string name (`06` + u16 length), `02 03 00 00 00` (the tag id of the solid style), then `01 r 01 g 01 b 01 a`.
+- OpenToonz writes precision scale 16384 (128 squared) for every drawing.
+- **A file written this way is one OpenToonz writes back unchanged.** Loading a `plidoc` level in OpenToonz 1.8.0 and saving it gives the same bytes (`tests/test_ink.py`).
+- Intersection data names strokes by their position in the drawing. Strokes added after the existing ones leave it valid, and the paint survives (pixel test). Removing or reordering earlier strokes would not.
+- **tcomposer does not fail on a scene with no exposed drawing; it waits forever.** The server checks for that before every render.
 - **The thickness bytes can be patched in place.** Tag sizes don't change, so the offsets inside group and image tags stay valid. `pli.pressure_patch` uses this.
