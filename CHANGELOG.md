@@ -7,8 +7,13 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
+Paint, a live view of my viewer, and reading only what is new make drawing together practical. The README has a new shot, a night walk, with every tool call that made it. The unit tests now run on Linux.
+
 ### Added
 
+- A new README shot, **Night walk**: 96 frames, ten layers and a character rig, seven depth planes, a camera truck and pan and a bloom pass, made with 41 tool calls. `docs/media/making_of_nightwalk.py` replays them.
 - `paint` fills closed areas of a drawing on an ink layer, like a click with the fill tool. OpenToonz does it through the bridge, as one undo step, and it reports the points that were not inside a closed area.
 - `live_view` returns a picture of the OpenToonz viewer as I see it, in a fraction of a second and without saving. The assistant can look after every few strokes.
 - `read_drawing(only_new=true)` returns only the strokes that appeared since the assistant last looked, and counts the ones that are gone.
@@ -79,6 +84,7 @@ This is the first public release. I built it so an AI assistant can work inside 
 - `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
 - **Packaging.** An `opentoonz-mcp` command, OpenToonz path auto-detection, an MCP Registry `server.json`, and CI and release workflows.
 
-[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/konkomaji/opentoonz-mcp/releases/tag/v0.1.0

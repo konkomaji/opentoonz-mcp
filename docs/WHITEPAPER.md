@@ -1,6 +1,6 @@
 # OpenToonz MCP: an editable, studio-grade 2D animation pipeline for AI assistants
 
-**Author:** konkomaji ([konkomaji.com](https://konkomaji.com/)) · **Version:** 1.0.0 · **Date:** November 2026
+**Author:** konkomaji ([konkomaji.com](https://konkomaji.com/)) · **Version:** 1.1.0 · **Date:** November 2026
 
 ## Abstract
 
@@ -16,7 +16,7 @@ Five ideas make it work:
 4. **Transactional safety.** Snapshots, rollback, locking and verification.
 5. **Studio practice and physics as parameters.** Not prose guidance.
 
-The system has 57 tools and 189 automated tests, 54 of which run through the installed OpenToonz.
+The system has 59 tools and 196 automated tests, 57 of which run through the installed OpenToonz.
 
 ## 1. Problem
 

@@ -12,19 +12,58 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/konkomaji/opentoonz-mcp/blob/main/LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
 
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.0.0/docs/media/demo.gif" width="720" alt="A blob character blinks, anticipates, jumps with squash and stretch, lands, and the camera pans with parallax">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/demo.gif" width="800" alt="Night. A traveller in a red coat walks along a dark ridge toward a lighthouse. A huge moon rises over two mountain ranges, the lighthouse beam sweeps across the sky, fireflies drift, and the camera pushes in and pans with her.">
 
-<sub>Made entirely with this server's tools. The character, background and timing are real OpenToonz vector levels, xsheet cells and keyframes, so you can open the scene and keep animating by hand.</sub>
+<sub><b>Night walk.</b> 96 frames, 10 layers plus a 16-part character rig, seven depth planes, a camera truck and pan, and a bloom pass. Every drawing is an OpenToonz vector level, every move is a keyframe, and the glow is real OpenToonz fx. Open the scene and change anything.</sub>
+
+<br><br>
+
+<a href="#how-this-shot-was-made">How this shot was made</a> ·
+<a href="#draw-together-on-the-same-drawing">Draw together</a> ·
+<a href="#install">Install</a> ·
+<a href="https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/TOOLS.md">59 tools</a> ·
+<a href="https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/DRAWING_TOGETHER.md">Guide</a>
 
 </div>
 
 ---
 
-## New in 1.0: draw together, on the same drawing
+## At a glance
+
+| | |
+|:--|:--|
+| **59 tools** | scenes, layers, drawing, ink strokes, paint, timing, keyframes, physics, rigs, walk and run, camera, fx looks, render |
+| **196 tests** | 57 of them drive the real OpenToonz: they render and compare pixels, or draw in its open window |
+| **3 ways to draw** | shapes and SVG paths · pen strokes on a shared ink layer · your own art, placed or traced |
+| **2 ways to work together** | through the files, with any OpenToonz 1.8 · live in your open window, with the otbridge plugin |
+| **Windows and Linux** | unit tests run on both in CI; rendering is tested on Windows and confirmed on Linux by a user |
+
+## How this shot was made
+
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/nightwalk-build.png" alt="Four stages of the night walk shot: sky, stars and moon; two mountain ranges with mist; lighthouse, beam and ridge; then the character rig, ink grass, fireflies and the film look">
+
+The whole shot is 41 tool calls. No frame was painted by hand and no video model was involved. In order:
+
+| Step | Tools | What happened |
+|:--|:--|:--|
+| **1. Layout** | `create_scene` `add_note` `add_layer` ×10 | A 96-frame scene at 24 fps and ten layers, back to front. The grass layer is an ink layer. |
+| **2. Sky** | `draw` ×3 | Seventeen bands of colour from cold indigo down to a warm horizon, twenty stars, and a moon with craters and two halo rings. |
+| **3. Depth** | `draw` ×2 | Two mountain ranges as SVG paths. The far one is paler and has moonlit faces; mist lies in front of the near one. |
+| **4. Lighthouse** | `draw` ×3 | The tower, its lamp room and glow, the rock, a two-part beam, and the ridge with a moonlit rim. |
+| **5. Character** | `build_character` `walk_cycle` | A 16-part rig with the proportions of a young woman, then a stroll: planted rolling feet, two-bone leg IK, hips on an inverted-pendulum arc, arms opposite the legs. |
+| **6. Grass** | `stroke` ×3 | 43 pen strokes, one per blade, each thick at the root and thin at the tip. |
+| **7. Motion** | `draw` `set_pivot` `set_keyframe` ×8 | Seven fireflies. Then the beam turns about the lamp, the moon rises, and the fireflies drift. |
+| **8. Camera** | `camera_move` ×2 | A truck-in to 86 % and a pan of 150 px. Each plane moves at its own speed: sky 3 %, far range 22 %, near range 45 %, ridge 100 %, grass 170 %. |
+| **9. Look** | `apply_look` | The `anime_satsuei` look: bloom and diffusion as OpenToonz fx nodes you can open in the FX Schematic. |
+| **10. Check and render** | `validate_scene` `render` | OpenToonz rendered 96 frames in 33 seconds. The server checked the frame count, blank frames and flashing. |
+
+The exact calls, with every coordinate, are in [`docs/media/making_of_nightwalk.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_nightwalk.py). Run it and you get the same scene, ready to edit in OpenToonz.
+
+## Draw together, on the same drawing
 
 <table>
 <tr>
-<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.0.0/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
+<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
 <td>
 
 Every line of this cat is one pen stroke the assistant placed with the `stroke` tool: 26 strokes, each with its own pressure, written straight into an OpenToonz vector level. No script generated it and nothing was traced.
@@ -33,6 +72,7 @@ That level is an **ink layer**. You and the assistant both draw on it:
 
 - **It sees your lines.** `read_drawing` returns every stroke on the drawing, yours included.
 - **It adds, it never replaces.** New strokes go on top. Your lines and your paint stay.
+- **It paints and it looks.** In live mode `paint` fills closed areas, and `live_view` shows it your viewer as you see it.
 - **It can be live.** With the optional [otbridge plugin](https://github.com/konkomaji/opentoonz-mcp/blob/main/bridge/README.md), strokes appear in your open OpenToonz window as they are drawn, and Ctrl+Z takes them back.
 
 The guide is **[docs/DRAWING_TOGETHER.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/DRAWING_TOGETHER.md)**.
@@ -77,8 +117,8 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 
 <table>
 <tr>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.0.0/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.0.0/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
 </tr>
 <tr>
 <td align="center"><sub>Cel shadow, wobble and pressure taper, rendered by OpenToonz</sub></td>
@@ -221,7 +261,7 @@ The same rule holds for ink layers. The `.pli` editor rewrites every level in my
 
 ## Limitations
 
-- **Windows first.** It is developed and tested on Windows with OpenToonz 1.8. Other platforms may work with `OPENTOONZ_HOME` set, but they are untested.
+- **Windows first, Linux second.** It is developed and render-tested on Windows with OpenToonz 1.8. The unit tests also run on Linux in CI, and a user runs the whole suite against OpenToonz 1.8.0 built from source on Linux; set `OPENTOONZ_HOME` and `OPENTOONZ_STUFF` there. macOS is untested.
 - **Drawing comes from shapes, paths, brush strokes and imported art.** There is no built-in image generator. Bring your own art, or have the assistant compose it from paths and parts.
 - **A shape layer has one author at a time.** A `vector` layer is rebuilt from the assistant's shapes. If you redraw it in the GUI, the assistant won't overwrite your work unless told to (`force=true`). To keep drawing on it together, turn it into an ink layer with `ink_layer`.
 - **Live drawing needs the otbridge plugin, and it exists for one build so far.** It is compiled for the official OpenToonz 1.8.0 Windows build and refuses to start in any other. Without it, OpenToonz does not reload a level that changed on disk: after the assistant draws, use File > Revert Scene to see it, and save your own strokes before asking it to draw. Ink strokes are lines only: paint areas in OpenToonz, or use a vector layer.
