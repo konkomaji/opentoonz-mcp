@@ -569,6 +569,7 @@ def _raster_drawing(shapes: list[dict], W: int, H: int, sty: str, seed: int):
 
 # ====================================================================== compile (vector) / render
 SCRIPT_LOG_DIR = WORK / "logs"
+SCRIPT_TIMEOUT = 600  # seconds
 
 
 def _keep_script_logs() -> int:
@@ -600,13 +601,19 @@ def _run_script(lines: list[str], tag: str) -> dict:
     sp = log_dir / "script.toonzscript"
     sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     t0 = time.time()
-    r = subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=600)
-    run = {"log_dir": str(log_dir), "returncode": r.returncode, "seconds": round(time.time() - t0, 1),
-           "stdout": r.stdout or "", "stderr": r.stderr or ""}
+    try:
+        r = subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=SCRIPT_TIMEOUT)
+        code, out, err = r.returncode, r.stdout or "", r.stderr or ""
+    except subprocess.TimeoutExpired as e:  # keep what OpenToonz printed before it hung
+        code = None
+        out, err = (x.decode("utf-8", "replace") if isinstance(x, bytes) else (x or "") for x in (e.stdout, e.stderr))
+        err += f"\nOTMCP: OpenToonz did not finish within {SCRIPT_TIMEOUT} s and was stopped\n"
+    run = {"log_dir": str(log_dir), "returncode": code, "seconds": round(time.time() - t0, 1),
+           "stdout": out, "stderr": err, "timed_out": code is None}
     (log_dir / "stdout.txt").write_text(run["stdout"], encoding="utf-8")
     (log_dir / "stderr.txt").write_text(run["stderr"], encoding="utf-8")
-    (log_dir / "run.json").write_text(json.dumps({k: run[k] for k in ("returncode", "seconds")}), encoding="utf-8")
+    (log_dir / "run.json").write_text(json.dumps({k: run[k] for k in ("returncode", "seconds", "timed_out")}), encoding="utf-8")
     _prune_script_logs()
     return run
 

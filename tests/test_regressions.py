@@ -273,3 +273,20 @@ def test_guarded_script_reports_errors_per_layer():
     assert '"OTMCP\\terror\\tarm-L\\t"' in lines[-2]
     run = {"stdout": "noise\nOTMCP\terror\tarm-L\tException reading x\n", "stderr": "OTMCP\terror\tleg\tbad\n"}
     assert S._script_errors(run) == {"arm-L": ["Exception reading x"], "leg": ["bad"]}
+
+
+def test_run_script_timeout_keeps_partial_output(tmp_path, monkeypatch):
+    import subprocess
+
+    from otmcp import config
+    from otmcp import server as S
+
+    def run(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"], output=b"started\n", stderr=None)
+
+    monkeypatch.setattr(S.subprocess, "run", run)
+    monkeypatch.setattr(config, "exe", lambda name: name)
+    monkeypatch.setattr(S, "SCRIPT_LOG_DIR", tmp_path)
+    r = S._run_script(["x"], "t")
+    assert r["timed_out"] and r["returncode"] is None and r["stdout"] == "started\n"
+    assert "did not finish" in S._output_tail(r)
