@@ -205,8 +205,11 @@ def test_color_lerp_hex_and_list():
 
 
 def test_text_anchor_matches_pil_baseline():
+    import io
+
     from PIL import ImageFont
-    f = ImageFont.truetype(r"C:\Windows\Fonts\arialbd.ttf", 200)
+    src = draw.font_source()  # the same font the text shapes use, whatever this system has
+    f = ImageFont.truetype(io.BytesIO(src) if isinstance(src, bytes) else src, 200)
     for anchor, text in [(a, t) for a in ("ms", "mb", "mt", "ma", "md", "mm") for t in ("H", "Hg")]:
         pil_box = f.getbbox(text, anchor=anchor)
         cs = vec._text_contours({"type": "text", "x": 0, "y": 0, "text": text, "size": 200, "anchor": anchor})

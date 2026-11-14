@@ -9,6 +9,7 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ### Fixed
 
+- Text shapes needed `C:\Windows\Fontsrialbd.ttf`. They now find a font on Windows, Linux and macOS, and fall back to the font Pillow carries. The OpenToonz process check and one test also named Windows programs. CI now runs the unit tests on Linux too. heralight found these by running the suite on Linux.
 - When OpenToonz could not build a vector level, the error only said "could not build vector levels", because the script output was thrown away. Each script run now keeps its script, stdout, stderr and exit code in `WORK/logs/` (the 5 newest runs and the 5 newest failed runs; `OTMCP_KEEP_SCRIPT_LOGS` changes the count), and the compile and render errors quote OpenToonz's own message and the log folder. A script that hangs is stopped after 600 s with its output kept, and the compile reports the layers it did not build instead of a bare `TimeoutExpired`. One layer that fails no longer stops the layers after it (#9). On Windows OpenToonz prints nothing to stdout, so there the reason is "no .pli written" plus the kept script; OpenToonz's own message shows on Linux.
 
 ## [1.0.0] - 2026-11-15

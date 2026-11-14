@@ -14,12 +14,17 @@ concurrency:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python }})
-    runs-on: windows-latest
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [windows-latest, ubuntu-latest]
         python: ["3.10", "3.11", "3.12"]
+        include:
+          # heralight's report: svgelements 1.9.6 on 3.13 raises in svgpath_contours; keep it visible
+          - os: ubuntu-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

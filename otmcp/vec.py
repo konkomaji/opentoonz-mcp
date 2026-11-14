@@ -96,15 +96,21 @@ def _resample(poly, closed, spacing):
 
 
 @lru_cache(maxsize=8)
-def _font(path: str):
+def _font(name: str | None):
+    import io
+
     from fontTools.ttLib import TTFont
-    return TTFont(path)
+
+    from .draw import font_source
+    src = font_source(name)
+    if src is None:
+        raise ValueError("no font found for text shapes; pass font_file with the path of a .ttf file")
+    return TTFont(io.BytesIO(src) if isinstance(src, bytes) else src, fontNumber=0)
 
 
 def _text_contours(sh) -> list[Contour]:
     from fontTools.pens.basePen import BasePen
-    font_file = sh.get("font_file") or r"C:\Windows\Fonts\arialbd.ttf"
-    f = _font(font_file)
+    f = _font(sh.get("font_file"))
     gs, cmap = f.getGlyphSet(), f.getBestCmap()
     upem = f["head"].unitsPerEm
     size = float(sh.get("size", 64))

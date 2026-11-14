@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 import copy
+import io
 import math
+import os
+import sys
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageColor, ImageDraw, ImageFont
@@ -212,13 +217,44 @@ def _bezier(points: list[tuple[float, float]], steps: int = 24) -> list[tuple[fl
     return out  # type: ignore[return-value]
 
 
+FONT_NAMES = ("arialbd.ttf", "arial.ttf", "segoeui.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
+              "Arial Bold.ttf", "Helvetica.ttc", "DejaVuSans.ttf")
+
+
+@lru_cache(maxsize=16)
+def font_source(name: str | None = None):
+    """A font to draw text with, on any system: the path of a font file, or the bytes of the font Pillow
+    carries when the system has none of the usual ones. name: a font file name or a full path."""
+    if name and Path(name).is_file():
+        return str(name)
+    if sys.platform == "win32":
+        dirs = [Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/Windows/Fonts"]
+    elif sys.platform == "darwin":
+        dirs = [Path("/System/Library/Fonts/Supplemental"), Path("/System/Library/Fonts"), Path("/Library/Fonts"),
+                Path.home() / "Library/Fonts"]
+    else:
+        dirs = [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts",
+                Path.home() / ".local/share/fonts"]
+    for candidate in ([name] if name else []) + list(FONT_NAMES):
+        for d in dirs:
+            if (d / candidate).is_file():
+                return str(d / candidate)
+            if sys.platform not in ("win32", "darwin") and d.is_dir():
+                hit = next(d.rglob(candidate), None)  # Linux keeps fonts in per-family subfolders
+                if hit:
+                    return str(hit)
+    try:
+        return ImageFont.load_default(40).font_bytes  # Pillow 10.1+: a real scalable font, built in
+    except (AttributeError, OSError, TypeError):
+        return None
+
+
 def _font(size: float, name: str | None = None):
-    for candidate in ([name] if name else []) + ["arialbd.ttf", "arial.ttf", "segoeui.ttf"]:
-        try:
-            return ImageFont.truetype(candidate, int(size))
-        except OSError:
-            continue
-    return ImageFont.load_default()
+    src = font_source(name)
+    if src is None:
+        return ImageFont.load_default()
+    return ImageFont.truetype(io.BytesIO(src) if isinstance(src, bytes) else src, int(size))
 
 
 def draw_shape(d: ImageDraw.ImageDraw, sh: dict, s: float) -> None:

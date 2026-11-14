@@ -265,9 +265,12 @@ def _scene_lock(name: str, timeout: float = 60.0):
 
 def _opentoonz_running() -> bool:
     try:
-        r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OpenToonz.exe", "/NH"], capture_output=True, text=True,
-                           timeout=10)
-        return "OpenToonz.exe" in r.stdout
+        if os.name == "nt":
+            r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OpenToonz.exe", "/NH"], capture_output=True,
+                               text=True, timeout=10)
+            return "OpenToonz.exe" in r.stdout
+        r = subprocess.run(["pgrep", "-x", "OpenToonz"], capture_output=True, text=True, timeout=10)
+        return r.returncode == 0
     except Exception:
         return False
 

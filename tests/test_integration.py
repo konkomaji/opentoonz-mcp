@@ -92,7 +92,7 @@ def test_evaluator_matches_opentoonz_render(tmp_path):
     doc.set_param("Col1", "x", keys)
     f = tmp_path / "s.tnz"
     doc.save(f)
-    subprocess.run([str(S.OT_HOME / "tcomposer.exe"), str(f), "-o", str(tmp_path / "o" / "o.png")],
+    subprocess.run([str(S.config.exe("tcomposer")), str(f), "-o", str(tmp_path / "o" / "o.png")],
                    cwd=S.OT_HOME, capture_output=True)
     ck = SceneDoc.load(f).get_params("Col1")["x"]["keys"]
     for fr in range(21):
