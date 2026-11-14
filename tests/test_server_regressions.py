@@ -270,3 +270,18 @@ def test_install_replaces_the_target_and_removes_the_build(tmp_path):
     S._install(built, dst)
     assert dst.read_bytes() == b"new" and not built.exists()
     assert [p.name for p in dst.parent.iterdir()] == ["a.pli"]  # no temp file left behind
+
+
+def test_failed_compile_explains_why_and_keeps_its_log():
+    """#9: a level OpenToonz cannot build is reported with OpenToonz's own output and a kept log folder."""
+    sc = fresh("qa_r_badsvg")
+    S.add_layer(sc, "ok"); S.draw(sc, "ok", 1, RECT)
+    S.add_layer(sc, "broken"); S.draw(sc, "broken", 1, CIRCLE)
+    S._svg_file(S._load_state(sc), "broken", 1).write_text("not an svg", encoding="utf-8")
+    res = S.compile_vectors(sc)
+    assert res["failed"] == ["broken"] and "broken" in res["failed_details"]
+    assert [c["layer"] for c in res["compiled"]] == ["ok"]  # one bad layer no longer stops the others
+    log = S.Path(res["log"])
+    assert (log / "FAILED").exists() and (log / "script.toonzscript").exists() and (log / "stdout.txt").exists()
+    with pytest.raises(RuntimeError, match="Script and OpenToonz output"):
+        S.render(sc)

@@ -225,3 +225,51 @@ def test_arc_keeps_brush_pressure():
     b = [{"type": "brush", "points": [[500, 0, 0.2], [600, 0, 1.0]]}]
     out = draw.tween_motion(a, b, 0.5, arc=0.2)
     assert [p[2] for p in out[0]["points"]] == [0.2, 1.0]
+
+
+# =========================================================== toonzscript runs (#9)
+def _fake_opentoonz(monkeypatch, stdout="", stderr="", code=0):
+    import subprocess
+
+    from otmcp import config
+    from otmcp import server as S
+
+    def run(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, code, stdout, stderr)
+
+    monkeypatch.setattr(S.subprocess, "run", run)
+    monkeypatch.setattr(config, "exe", lambda name: name)
+    return S
+
+
+def test_run_script_keeps_script_and_output(tmp_path, monkeypatch):
+    S = _fake_opentoonz(monkeypatch, stdout="hello\n", stderr="warn\n", code=1)
+    monkeypatch.setattr(S, "SCRIPT_LOG_DIR", tmp_path / "logs")
+    run = S._run_script(['print("hello");'], "t")
+    d = tmp_path / "logs" / run["log_dir"].split("/")[-1].split("\\")[-1]
+    assert (d / "script.toonzscript").read_text(encoding="utf-8") == 'print("hello");\n'
+    assert (d / "stdout.txt").read_text(encoding="utf-8") == "hello\n"
+    assert (d / "stderr.txt").read_text(encoding="utf-8") == "warn\n"
+    assert run["returncode"] == 1 and run["stdout"] == "hello\n"
+
+
+def test_script_logs_keep_newest_and_newest_failed(tmp_path, monkeypatch):
+    from otmcp import server as S
+    monkeypatch.setattr(S, "SCRIPT_LOG_DIR", tmp_path)
+    monkeypatch.setenv("OTMCP_KEEP_SCRIPT_LOGS", "2")
+    for i in range(8):
+        d = tmp_path / f"compile_{i:013d}_abcdef"
+        d.mkdir()
+        if i in (1, 2, 3):
+            (d / "FAILED").write_text("{}", encoding="utf-8")
+    S._prune_script_logs()
+    assert sorted(int(p.name.split("_")[1]) for p in tmp_path.iterdir()) == [2, 3, 6, 7]
+
+
+def test_guarded_script_reports_errors_per_layer():
+    from otmcp import server as S
+    lines = S._guarded("arm-L", ["var l0 = new Level();", 'l0.load("x");'])
+    assert lines[0] == "try {" and lines[-3] == "} catch (e) {"
+    assert '"OTMCP\\terror\\tarm-L\\t"' in lines[-2]
+    run = {"stdout": "noise\nOTMCP\terror\tarm-L\tException reading x\n", "stderr": "OTMCP\terror\tleg\tbad\n"}
+    assert S._script_errors(run) == {"arm-L": ["Exception reading x"], "leg": ["bad"]}
