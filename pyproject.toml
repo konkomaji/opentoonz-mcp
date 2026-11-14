@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opentoonz-mcp"
-version = "0.1.0"
+version = "1.0.0"
 description = "MCP server that lets AI assistants animate in OpenToonz: real vector levels, xsheet timing, keyframes, physics and studio-style line work."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "konkomaji", email = "konkomaji@gmail.com" }]
 keywords = ["mcp", "model-context-protocol", "opentoonz", "animation", "2d-animation", "claude", "ai"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Intended Audience :: End Users/Desktop",
   "Operating System :: Microsoft :: Windows",

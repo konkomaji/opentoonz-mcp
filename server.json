@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://konkomaji.com/",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "opentoonz-mcp",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {
