@@ -270,3 +270,22 @@ def test_install_replaces_the_target_and_removes_the_build(tmp_path):
     S._install(built, dst)
     assert dst.read_bytes() == b"new" and not built.exists()
     assert [p.name for p in dst.parent.iterdir()] == ["a.pli"]  # no temp file left behind
+
+
+def test_failed_compile_explains_why_and_keeps_its_log(monkeypatch):
+    """#9: a level OpenToonz cannot build is reported with OpenToonz's own message and a kept log folder.
+    OpenToonz 1.8.0 loads even a broken SVG as an empty level, so the script for one layer throws instead."""
+    guarded = S._guarded
+    monkeypatch.setattr(S, "_guarded", lambda lname, body: guarded(
+        lname, (['throw "otmcp test failure";'] if lname == "broken" else []) + body))
+    sc = fresh("qa_r_badlayer")
+    S.add_layer(sc, "broken"); S.draw(sc, "broken", 1, CIRCLE)
+    S.add_layer(sc, "ok"); S.draw(sc, "ok", 1, RECT)
+    res = S.compile_vectors(sc)
+    assert res["failed"] == ["broken"], res
+    assert any("otmcp test failure" in m for m in res["failed_details"]["broken"])
+    assert [c["layer"] for c in res["compiled"]] == ["ok"]  # a failing layer no longer stops the next ones
+    log = S.Path(res["log"])
+    assert (log / "FAILED").exists() and (log / "script.toonzscript").exists() and (log / "stdout.txt").exists()
+    with pytest.raises(RuntimeError, match="otmcp test failure"):
+        S.render(sc)

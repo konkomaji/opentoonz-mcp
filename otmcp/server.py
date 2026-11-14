@@ -568,12 +568,69 @@ def _raster_drawing(shapes: list[dict], W: int, H: int, sty: str, seed: int):
 
 
 # ====================================================================== compile (vector) / render
-def _run_script(lines: list[str], tag: str) -> None:
-    TMP.mkdir(parents=True, exist_ok=True)
-    sp = TMP / f"{tag}_{int(time.time() * 1000)}.toonzscript"
+SCRIPT_LOG_DIR = WORK / "logs"
+SCRIPT_TIMEOUT = 600  # seconds
+
+
+def _keep_script_logs() -> int:
+    try:
+        return max(0, int(os.environ.get("OTMCP_KEEP_SCRIPT_LOGS", "5")))
+    except ValueError:
+        return 5
+
+
+def _prune_script_logs() -> None:
+    """Keep the N newest script runs and the N newest failed ones (N = OTMCP_KEEP_SCRIPT_LOGS, default 5)."""
+    if not SCRIPT_LOG_DIR.is_dir():
+        return
+    keep = _keep_script_logs()
+    runs = sorted((d for d in SCRIPT_LOG_DIR.iterdir() if d.is_dir()), key=lambda d: d.name.rsplit("_", 2)[-2:],
+                  reverse=True)
+    failed = [d for d in runs if (d / "FAILED").exists()]
+    kept = set(runs[:keep]) | set(failed[:keep])
+    for d in runs:
+        if d not in kept:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _run_script(lines: list[str], tag: str) -> dict:
+    """Run a toonzscript. The script, stdout, stderr and exit code stay in WORK/logs/<tag>_<ms>_<id>/ so a
+    failure can be explained; callers judge success from the files the script writes, not from the exit code."""
+    log_dir = SCRIPT_LOG_DIR / f"{tag}_{int(time.time() * 1000):013d}_{uuid.uuid4().hex[:6]}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    sp = log_dir / "script.toonzscript"
     sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, timeout=600)
-    sp.unlink(missing_ok=True)
+    t0 = time.time()
+    try:
+        r = subprocess.run([str(config.exe("OpenToonz")), str(sp)], cwd=OT_HOME, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=SCRIPT_TIMEOUT)
+        code, out, err = r.returncode, r.stdout or "", r.stderr or ""
+    except subprocess.TimeoutExpired as e:  # keep what OpenToonz printed before it hung
+        code = None
+        out, err = (x.decode("utf-8", "replace") if isinstance(x, bytes) else (x or "") for x in (e.stdout, e.stderr))
+        err += f"\nOTMCP: OpenToonz did not finish within {SCRIPT_TIMEOUT} s and was stopped\n"
+    run = {"log_dir": str(log_dir), "returncode": code, "seconds": round(time.time() - t0, 1),
+           "stdout": out, "stderr": err, "timed_out": code is None}
+    (log_dir / "stdout.txt").write_text(run["stdout"], encoding="utf-8")
+    (log_dir / "stderr.txt").write_text(run["stderr"], encoding="utf-8")
+    (log_dir / "run.json").write_text(json.dumps({k: run[k] for k in ("returncode", "seconds", "timed_out")}), encoding="utf-8")
+    _prune_script_logs()
+    return run
+
+
+def _script_errors(run: dict) -> dict[str, list[str]]:
+    """Errors the generated script printed as OTMCP<TAB>error<TAB><layer><TAB><message>, by layer."""
+    out: dict[str, list[str]] = {}
+    for ln in (run["stdout"] + "\n" + run["stderr"]).splitlines():
+        parts = ln.strip().split("\t")
+        if len(parts) >= 4 and parts[0] == "OTMCP" and parts[1] == "error":
+            out.setdefault(parts[2], []).append("\t".join(parts[3:]))
+    return out
+
+
+def _output_tail(run: dict, n: int = 12) -> str:
+    text = "\n".join(x for x in (run["stdout"].strip(), run["stderr"].strip()) if x)
+    return "\n".join(text.splitlines()[-n:]) or "(OpenToonz printed nothing)"
 
 
 def _install(built: Path, dst: Path) -> None:
@@ -623,6 +680,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
     lines = []
     for i, (lname, L, _pf) in enumerate(todo):
         dst = (out_dir / f"{lname}.pli").as_posix()
+        start = len(lines)
         if L["mode"] == "traced":
             tr = L.get("trace", {})
             src = (SVG_DIR / st["name"] / lname / f"{lname}..png").as_posix()
@@ -630,17 +688,22 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
             lines += [f"var s{i} = new Level();", f"s{i}.load({json.dumps(src)});", f"var v{i} = new {kind}();"]
             for prop, val in _trace_props(tr).items():
                 lines.append(f"v{i}.{prop} = {json.dumps(val)};")
-            lines += [f"var l{i} = v{i}.vectorize(s{i});", f"l{i}.save({json.dumps(dst)});"]
+            body = [f"var l{i} = v{i}.vectorize(s{i});", f"l{i}.save({json.dumps(dst)});"]
+            lines = lines[:start] + _guarded(lname, lines[start:] + body)
         else:
             src = (SVG_DIR / st["name"] / lname / f"{lname}..svg").as_posix()
-            lines += [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});", f"l{i}.save({json.dumps(dst)});"]
+            lines += _guarded(lname, [f"var l{i} = new Level();", f"l{i}.load({json.dumps(src)});",
+                                      f"l{i}.save({json.dumps(dst)});"])
     t0 = time.time()
-    _run_script(lines, "compile")
-    done, failed = [], []
+    run = _run_script(lines, "compile")
+    errors = _script_errors(run)
+    done, failed, failed_details = [], [], {}
     for lname, L, pf in todo:
         built = out_dir / f"{lname}.pli"
         if not built.exists():
             failed.append(lname)
+            failed_details[lname] = errors.get(lname) or ["no .pli written; OpenToonz output ends with:",
+                                                          _output_tail(run)]
             continue
         _install(built, pf)
         if L["mode"] == "traced":  # faithful trace: no stylised pressure
@@ -673,12 +736,22 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         done.append(item)
     shutil.rmtree(out_dir, ignore_errors=True)
     _save_state(st)
-    res = {"compiled": done, "seconds": round(time.time() - t0, 1)}
+    res = {"compiled": done, "seconds": round(time.time() - t0, 1), "log": run["log_dir"]}
     if failed:
         res["failed"] = failed
+        res["failed_details"] = failed_details
+        log_dir = Path(run["log_dir"])
+        (log_dir / "FAILED").write_text(json.dumps(failed_details, indent=2), encoding="utf-8")
+        _prune_script_logs()
     if skipped:
         res["skipped_gui_edited"] = skipped
     return res
+
+
+def _guarded(lname: str, body: list[str]) -> list[str]:
+    """Wrap one layer's script lines so an exception is printed with the layer name and the next layers still build."""
+    tag = json.dumps(f"OTMCP\terror\t{lname}\t")
+    return ["try {", *("  " + ln for ln in body), "} catch (e) {", f"  print({tag} + e);", "}"]
 
 
 def _trace_props(tr: dict) -> dict:
@@ -1393,7 +1466,8 @@ def ink_layer(scene: str, layer: str) -> dict:
     if L.get("dirty") and not L.get("gui_edited"):
         comp = _compile(c.st, only=[name])
         if comp.get("failed"):
-            raise RuntimeError(f"OpenToonz could not build '{name}'; it stays a vector layer")
+            raise RuntimeError(f"OpenToonz could not build '{name}'; it stays a vector layer. "
+                               f"Details: {_details(comp)}")
     doc, _pf = _ink_doc(c, name)
     L["mode"], L["dirty"] = "ink", False
     L["drawings"] = {str(f): [] for f in doc.frames() if f < BOIL_BASE}
@@ -2318,12 +2392,17 @@ def compile_vectors(scene: str, force: bool = False) -> dict:
     return res
 
 
+def _details(comp: dict) -> str:
+    """Short reason for a failed compile, for error messages: native errors per layer and the log folder."""
+    return f"{json.dumps(comp.get('failed_details'))[:1500]}. Script and OpenToonz output: {comp.get('log')}"
+
+
 def _prepare(scene: str) -> tuple[Ctx, dict]:
     st = _load_state(scene)
     comp = _compile(st)
     if comp.get("failed"):
         raise RuntimeError(f"OpenToonz could not build vector levels {comp['failed']}; nothing rendered. "
-                           f"Check the drawings on those layers (validate_scene).")
+                           f"Details: {_details(comp)}")
     c = Ctx(scene, "render_prepare", {}, mutate=False)
     if not any(cell for ci in range(len(c.doc.columns())) for cell in c.doc.column_cells(ci)):
         # with no exposed drawing the scene has no frames, and tcomposer waits forever instead of failing
