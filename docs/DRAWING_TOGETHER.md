@@ -14,7 +14,7 @@ An **ink layer** has no list of shapes. The level file (`.pli`) is the only copy
 | Made with | `draw`, `draw_many`, `inbetween` | `stroke` |
 | Sees my strokes | no | yes (`read_drawing`) |
 | I edit it in OpenToonz | layer is protected until `force=true` | nothing special, keep going |
-| Filled shapes and cel shadows | yes | lines only; paint in OpenToonz |
+| Filled shapes and cel shadows | yes | lines, and `paint` for flat colour in live mode |
 | Good for | layouts, shapes, parts, generated motion | sketching, clean-up, fixing, drawing on my art |
 
 Both kinds can live in one scene. A common setup is shape layers for the background and props, and ink layers for the characters we draw together.
@@ -58,6 +58,8 @@ If it says `connected: false`, look at `%TEMP%\otbridge.log`. It has one line sa
 | `read_drawing(scene, layer, frame)` | Every stroke on a drawing: index, colour, width, closed or open, bounding box, points with pressure, and `by` (`mcp` or `other`). Works on vector layers too. |
 | `stroke(scene, layer, frame, strokes)` | Adds pen lines on top of the drawing. |
 | `erase_stroke(scene, layer, frame, indices)` | Removes strokes by index. |
+| `paint(scene, layer, frame, points, color)` | Fills the closed area around each point. Live mode only. |
+| `live_view()` | A picture of my OpenToonz viewer as it is right now. Live mode only. |
 | `opentoonz_live(action)` | The live link: `status`, `save`, `undo`, `redo`. |
 
 All positions are canvas pixels, origin at the top left, the same as every other tool.
@@ -90,6 +92,8 @@ That example is one whisker of the cat in the README. The whole cat is 26 such s
 
 `index` is the drawing order. A higher index is on top.
 
+`read_drawing(..., only_new=true)` returns just the strokes that appeared since the assistant last looked at that drawing, and `gone` counts the ones that disappeared. After I add three lines to a drawing of two hundred, it reads three.
+
 ## Working through the files
 
 This works with any OpenToonz, with nothing installed in it.
@@ -110,6 +114,8 @@ When the scene is open in OpenToonz, `stroke`, `read_drawing` and `erase_stroke`
 - `read_drawing` returns what is on screen, including strokes I have not saved.
 - Each call is one undo step. Ctrl+Z in OpenToonz takes it back, and so does `opentoonz_live("undo")`.
 - Erasing is done by OpenToonz, so it works on strokes that border painted areas too.
+- `paint` fills closed areas, and tells the assistant which points missed because the outline has a gap.
+- `live_view` shows the assistant my viewer as I see it, zoom and onion skin included, without saving. It is how it checks its strokes between batches.
 
 The tools decide by themselves. `opentoonz_live()` shows which mode is active:
 
@@ -150,7 +156,7 @@ Each drawing is held until the next one, as on any layer with automatic timing. 
 
 ## Limits
 
-- **Lines only.** The painted regions of a level are stored as a graph of stroke intersections. The server can keep that data valid when it adds strokes, but it cannot write it, so it cannot fill an area. Paint in OpenToonz, or use a vector layer for filled shapes.
+- **Paint needs live mode.** The painted regions of a level are stored as a graph of stroke intersections. The server can keep that data valid when it adds strokes, but it cannot write it. In live mode OpenToonz works the regions out, so `paint` is there; through the files it is not. Use a vector layer for filled shapes if you have no bridge.
 - **Erasing next to paint, through the files.** A stroke that a painted area depends on, or any stroke drawn before one, is refused with a clear message. In live mode OpenToonz does the erase and this limit is gone.
 - **Live mode is one build.** The plugin is compiled for the official OpenToonz 1.8.0 Windows build and stays off anywhere else. File mode has no such limit.
 - **Not two hands at the same moment.** In live mode the assistant's strokes arrive between mine, not during one. If a dialog is open in OpenToonz, its commands wait, and after 20 seconds it reports that OpenToonz is busy.

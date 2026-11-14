@@ -27,9 +27,15 @@ def svgpath_contours(d: str, transform: str | None = None, spacing: float = 4.0,
     if transform:
         p = p * Matrix(transform)
         p.reify()
+    # Split at every Move myself: iterating svgelements' Subpath raises TypeError on Python 3.13.
+    groups: list[list] = []
+    for s in p.segments():
+        if isinstance(s, Move) or not groups:
+            groups.append([])
+        if not isinstance(s, Move):
+            groups[-1].append(s)
     out = []
-    for sub in p.as_subpaths():
-        segs = [s for s in sub if not isinstance(s, Move)]
+    for segs in groups:
         if not segs:
             continue
         closed = any(isinstance(s, Close) for s in segs)

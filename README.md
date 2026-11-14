@@ -192,7 +192,7 @@ Drawing together is a shorter loop, repeated:
 3. `stroke` (a few lines)
 4. `preview_frame` (look), then back to 2
 
-The full list of 57 tools with every parameter is in **[docs/TOOLS.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/TOOLS.md)**.
+The full list of 59 tools with every parameter is in **[docs/TOOLS.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/TOOLS.md)**.
 
 ## How it works
 

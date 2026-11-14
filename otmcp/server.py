@@ -1353,6 +1353,8 @@ def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float
                                   "color": list(it["color"])} for it in items])
         L.setdefault("ink_sigs", {}).setdefault(str(int(frame)), []).extend(sigs)
         L["drawings"].setdefault(str(int(frame)), [])
+        if str(int(frame)) in L.get("ink_seen", {}):
+            L["ink_seen"][str(int(frame))].extend(sigs)
         return c.commit({"layer": name, "drawing": int(frame), "strokes": r["indices"],
                          "strokes_in_drawing": r["strokes_in_drawing"], "live": LIVE_NOTE})
     doc, pf = _ink_doc(c, name)
@@ -1362,24 +1364,28 @@ def stroke(scene: str, layer: str, frame: int, strokes: list[dict], taper: float
     doc.save(str(pf))
     L.setdefault("ink_sigs", {}).setdefault(str(int(frame)), []).extend(sigs)
     L["drawings"].setdefault(str(int(frame)), [])
+    if str(int(frame)) in L.get("ink_seen", {}):
+        L["ink_seen"][str(int(frame))].extend(sigs)
     msg = _retime(c, name)
     if msg:
         c.warnings.append(msg)
     if int(frame) > c.st["frames"]:
         c.warnings.append(f"drawing {frame} is after the scene end ({c.st['frames']}); extend with set_scene_settings")
-    if _opentoonz_running():
+    if bridge.open_scene() is None and _opentoonz_running():
         c.warnings.append(INK_OPEN_NOTE)
     return c.commit({"layer": name, "drawing": int(frame), "strokes": idx,
                      "strokes_in_drawing": len(doc.strokes(int(frame)))})
 
 
 @tool
-def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> dict:
+def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16, only_new: bool = False) -> dict:
     """Look at a vector drawing as strokes, the user's included: what is on the level file right now.
     Works on ink and vector layers. Each stroke: index (drawing order, later = on top), by ('mcp' = drawn with
     stroke, 'other' = the user in OpenToonz or shapes), color, width px, closed, bbox [x0, y0, x1, y1] and
     points [[x, y, pressure], ...] along the line (canvas px, thinned to max_points). Use it before adding to
-    someone's drawing, then preview_frame to see the result."""
+    someone's drawing, then preview_frame to see the result.
+    only_new=true returns just the strokes that appeared since your last read_drawing or stroke on this
+    drawing ('gone' counts the ones that disappeared): the quick way to see what the user just did."""
     c = Ctx(scene, "read_drawing", {"layer": layer, "frame": frame}, mutate=False)
     name = _safe(layer)
     L = c.layer(name)
@@ -1397,8 +1403,24 @@ def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> di
         found, palette, on_level = doc.strokes(int(frame)), doc.styles(), doc.frames()
     mine = set(L.get("ink_sigs", {}).get(str(int(frame)), []))
     max_points = max(2, min(200, int(max_points)))
+    now = [_ink_sig(s["points"]) for s in found]
+    seen = L.setdefault("ink_seen", {})
+    last = seen.get(str(int(frame)))
+    seen[str(int(frame))] = now
+    _save_state(c.st)
+    fresh = None
+    if only_new and last is not None:
+        left = list(last)
+        fresh = set()
+        for i, g in enumerate(now):  # as multisets: two identical strokes are two strokes
+            if g in left:
+                left.remove(g)
+            else:
+                fresh.add(i)
     out = []
     for s in found:
+        if fresh is not None and s["index"] not in fresh:
+            continue
         line = plidoc.sample(s["points"], 4)
         peak = max(t for _, _, t in line) or 1.0
         step = max(1, math.ceil((len(line) - 1) / (max_points - 1)))
@@ -1413,6 +1435,12 @@ def read_drawing(scene: str, layer: str, frame: int, max_points: int = 16) -> di
                     "points": px})
     res = {"layer": name, "mode": L["mode"], "drawing": int(frame), "strokes": out, "canvas": [W, H],
            "source": "OpenToonz (live, includes unsaved strokes)" if live else "level file"}
+    if fresh is not None:
+        res["only_new"] = True
+        res["strokes_in_drawing"] = len(found)
+        res["gone"] = len(last) - (len(found) - len(fresh))
+    elif only_new:
+        res["note_only_new"] = "first look at this drawing: everything is listed"
     if on_level is not None:
         res["drawings_on_level"] = on_level
         if int(frame) not in on_level:
@@ -1453,6 +1481,55 @@ def erase_stroke(scene: str, layer: str, frame: int, indices: list[int]) -> dict
         c.warnings.append(INK_OPEN_NOTE)
     return c.commit({"layer": name, "drawing": int(frame), "erased": sorted(want),
                      "strokes_in_drawing": len(before) - len(want)})
+
+
+@tool
+def paint(scene: str, layer: str, frame: int, points: list[list[float]], color: str = "#ffffff") -> dict:
+    """Paint closed areas of a drawing on an ink layer, like clicking with the fill tool: every area that
+    contains one of the points (canvas px) gets the colour. The outline around a point must be closed.
+    Live only: it is done by OpenToonz itself, so the scene must be open there with the otbridge plugin
+    (opentoonz_live shows the link). 'missed' lists points that were not inside a closed area: close the gap
+    with stroke, or move the point. One undo step in OpenToonz."""
+    _check_drawing_id(frame)
+    if not points or any(len(p) < 2 for p in points):
+        raise ValueError("points must be a list of [x, y]")
+    c = Ctx(scene, "paint", {"layer": layer, "frame": frame, "n_points": len(points), "color": color})
+    name, _L = _ink_layer(c, layer)
+    if not bridge.has_open(c.sf):
+        raise ValueError("paint needs the scene open in OpenToonz with the otbridge plugin: OpenToonz works out "
+                         "the closed areas, and this server cannot write that data into the file. Open the scene "
+                         "(open_in_opentoonz), check opentoonz_live, then call paint again. Or paint it by hand.")
+    W, H, k = _ink_units(c)
+    r = bridge.call("fill", level=name, drawing=int(frame), color=list(drawlib.color(color)),
+                    points=[[(float(p[0]) - W / 2) * k, (H / 2 - float(p[1])) * k] for p in points])
+    missed = [[round(x / k + W / 2, 1), round(H / 2 - y / k, 1)] for x, y in r.get("missed", [])]
+    res = {"layer": name, "drawing": int(frame), "painted": r["painted"], "live": LIVE_NOTE}
+    if missed:
+        res["missed"] = missed
+        res["hint"] = "A missed point is outside every closed area. Close the outline with stroke, then paint again."
+    return c.commit(res)
+
+
+@tool
+def live_view(max_width: int = 1280) -> McpImage:
+    """See the OpenToonz viewer exactly as the user sees it right now: their zoom and pan, onion skin, unsaved
+    strokes, everything. It takes a fraction of a second and saves nothing, so use it after every few live
+    strokes to check your work. (preview_frame renders the saved files through the camera instead.)
+    Needs OpenToonz running with the otbridge plugin."""
+    out = TMP / f"view_{uuid.uuid4().hex}.png"
+    TMP.mkdir(parents=True, exist_ok=True)
+    r = bridge.call("view", path=str(out), timeout=30.0)
+    if r is None:
+        raise ValueError("OpenToonz is not connected (opentoonz_live shows why); use preview_frame instead")
+    from PIL import Image
+    try:
+        img = Image.open(out).convert("RGB")
+        if img.width > max_width:
+            img = img.resize((max_width, round(img.height * max_width / img.width)))
+        img.save(out)
+        return McpImage(data=out.read_bytes(), format="png")
+    finally:
+        out.unlink(missing_ok=True)
 
 
 @tool

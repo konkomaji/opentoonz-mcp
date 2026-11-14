@@ -61,6 +61,8 @@ One JSON object per line each way. Coordinates are OpenToonz vector units (origi
 | `read` | target | every stroke of the drawing, with style and solid colour |
 | `stroke` | target, `strokes: [{points, color: [r,g,b,a] or style, loop}]` | adds strokes on top; one undo step |
 | `erase` | target, `indices` | removes strokes; one undo step |
+| `fill` | target, `points: [[x, y], ...]`, `color` or `style` | paints the closed area around each point; one undo step; returns the points that missed |
+| `view` | `path` | writes a PNG of the viewer as it is on screen |
 | `save` | | File > Save All |
 | `undo`, `redo` | | Edit > Undo, Edit > Redo |
 

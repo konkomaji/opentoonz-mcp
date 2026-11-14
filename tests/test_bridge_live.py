@@ -3,11 +3,13 @@
 These tests open the OpenToonz window. They run only when the plugin is installed
 (<OpenToonz>/imageformats/otbridge.dll, built by bridge/build.py). pytest -m slow
 """
+import io
 import os
 import subprocess
 import time
 
 import pytest
+from PIL import Image
 
 from otmcp import bridge, config, learn
 from otmcp import server as S
@@ -64,11 +66,15 @@ def scene_with_a_line(name):
 
 
 def test_no_bridge_means_file_mode():
-    assert bridge.open_scene() is None or True  # never raises when nothing listens
     os.environ["OTMCP_BRIDGE"] = "0"
     try:
         assert bridge.call("ping") is None and not bridge.has_open("x.tnz")
         assert S.opentoonz_live()["connected"] is False
+        sc = scene_with_a_line("qa_live_off")
+        with pytest.raises(RuntimeError, match="needs the scene open in OpenToonz"):
+            S.paint(sc, "hand", 1, [[320, 180]], "#ff0000")
+        with pytest.raises(RuntimeError, match="not connected"):
+            S.live_view()
     finally:
         del os.environ["OTMCP_BRIDGE"]
 
@@ -112,3 +118,47 @@ def test_live_refusals_come_back_as_clear_errors(opentoonz):
     with pytest.raises(RuntimeError, match="strokes"):
         S.erase_stroke(sc, "hand", 1, [5])
     assert len(S.read_drawing(sc, "hand", 1)["strokes"]) == 1
+
+
+def test_only_new_shows_what_the_user_just_drew(opentoonz):
+    sc = scene_with_a_line("qa_live_new")
+    opentoonz(sc)
+    first = S.read_drawing(sc, "hand", 1, only_new=True)
+    assert len(first["strokes"]) == 1 and "note_only_new" in first  # first look: everything
+    assert S.read_drawing(sc, "hand", 1, only_new=True)["strokes"] == []  # nothing happened since
+    S.stroke(sc, "hand", 1, [{"points": [[150, 80], [490, 80]], "smooth": False}])
+    assert S.read_drawing(sc, "hand", 1, only_new=True)["strokes"] == []  # my own stroke is not news to me
+    # the user draws a line in OpenToonz (sent through the same socket their brush would use internally)
+    bridge.call("stroke", level="hand", drawing=1,
+                strokes=[{"points": [[-40.0, 10.0, 2.0], [0.0, 12.0, 2.0], [40.0, 10.0, 2.0]], "color": [16, 128, 48, 255]}])
+    new = S.read_drawing(sc, "hand", 1, only_new=True)
+    assert [(s["index"], s["by"], s["color"]) for s in new["strokes"]] == [(2, "other", "#108030")]
+    assert new["strokes_in_drawing"] == 3 and new["gone"] == 0
+    bridge.call("erase", level="hand", drawing=1, indices=[0])
+    after = S.read_drawing(sc, "hand", 1, only_new=True)
+    assert after["strokes"] == [] and after["gone"] == 1
+
+
+def test_paint_fills_a_closed_area_and_the_viewer_shows_it(opentoonz):
+    sc = "qa_live_paint"
+    S.create_scene(sc, width=640, height=360, frames=4, overwrite=True)
+    S.add_layer(sc, "hand", mode="ink")
+    box = [[220, 80], [420, 80], [420, 280], [220, 280]]
+    S.stroke(sc, "hand", 1, [{"points": box, "closed": True, "smooth": False, "width": 6}])
+    pf = S._pli_file(S._load_state(sc), "hand")
+    opentoonz(sc)
+    res = S.paint(sc, "hand", 1, [[320, 180], [40, 40]], "#f0c020")
+    assert res["painted"] == 1 and res["missed"] == [[40.0, 40.0]]  # the second point is outside the box
+    S.opentoonz_live("undo")
+    S.opentoonz_live("redo")
+    view = Image.open(io.BytesIO(S.live_view().data))
+    assert view.width > 200 and view.height > 100
+    colours = view.convert("RGB").getcolors(view.width * view.height) or []
+    assert any(abs(r - 240) < 12 and abs(g - 192) < 12 and abs(b - 32) < 12 and n > 500 for n, (r, g, b) in colours), \
+        "the painted yellow is not in the viewer"
+    S.opentoonz_live("save")
+    S._tcomposer(S._scene_file(sc), S.TMP / "qa_live_paint" / "p..png", (1, 1))
+    im = S._flat(next((S.TMP / "qa_live_paint").glob("p.*.png")), (255, 255, 255, 255))
+    assert all(abs(a - b) < 8 for a, b in zip(im.getpixel((320, 180)), (240, 192, 32)))  # the paint is in the file
+    assert im.getpixel((40, 40)) == (255, 255, 255)
+    assert (240, 192, 32, 255) in PliDoc.load(str(pf)).styles().values()

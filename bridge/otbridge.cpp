@@ -12,6 +12,7 @@
 // (A generic plugin would be the obvious kind, but the Qt that OpenToonz 1.8.0 ships does not create generic
 // plugins from QT_QPA_GENERICPLUGINS or -plugin; I measured that.) Set OTBRIDGE=0 to keep the bridge off.
 
+#include <QApplication>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -24,6 +25,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMutexLocker>
+#include <QOpenGLWidget>
 #include <QPointer>
 
 #include <atomic>
@@ -44,6 +46,7 @@
 #include "toonzqt/menubarcommand.h"
 #include "tcolorstyles.h"
 #include "tpalette.h"
+#include "tregion.h"
 #include "tstroke.h"
 #include "tundo.h"
 #include "tvectorimage.h"
@@ -356,6 +359,84 @@ QJsonObject opErase(const QJsonObject &cmd) {
   return QJsonObject{{"ok", true}, {"erased", (int)idx.size()}, {"strokes_in_drawing", (int)t.image->getStrokeCount()}};
 }
 
+// One undo step for painted areas: the point that was clicked, and the style each area had before and after.
+class FillUndo final : public TUndo {
+  TXshLevelP m_level;
+  TVectorImageP m_image;
+  std::vector<TPointD> m_points;
+  std::vector<int> m_before;
+  int m_style;
+
+public:
+  FillUndo(const Target &t, const std::vector<TPointD> &points, const std::vector<int> &before, int style)
+      : m_level(t.level), m_image(t.image), m_points(points), m_before(before), m_style(style) {}
+  void apply(bool redoing) const {
+    {
+      QMutexLocker lock(m_image->getMutex());
+      for (size_t i = 0; i < m_points.size(); ++i) m_image->fill(m_points[i], redoing ? m_style : m_before[i]);
+    }
+    Target t;
+    t.level = m_level;
+    changed(t);
+  }
+  void undo() const override { apply(false); }
+  void redo() const override { apply(true); }
+  int getSize() const override { return sizeof(*this) + (int)m_points.size() * 32; }
+  QString getHistoryString() override {
+    return QString("Assistant: paint %1 area(s) on %2").arg(m_points.size()).arg(QString::fromStdWString(m_level->getName()));
+  }
+};
+
+// Paint the closed areas that contain the given points, the way the fill tool does on a click.
+QJsonObject opFill(const QJsonObject &cmd) {
+  Target t = resolve(cmd, false);
+  if (!t.error.isEmpty()) return fail(t.error);
+  TPalette *palette = t.image->getPalette();
+  if (!palette) return fail("the level has no palette");
+  bool paletteGrew = false;
+  int style = cmd.contains("color") ? styleFor(palette, cmd["color"].toArray(), paletteGrew) : cmd["style"].toInt(1);
+  std::vector<TPointD> done;
+  std::vector<int> before;
+  QJsonArray missed;
+  {
+    QMutexLocker lock(t.image->getMutex());
+    t.image->findRegions();
+    for (const QJsonValue &v : cmd["points"].toArray()) {
+      QJsonArray a = v.toArray();
+      TPointD p(a.at(0).toDouble(), a.at(1).toDouble());
+      TRegion *r = t.image->getRegion(p);
+      if (!r) {
+        missed.append(a);  // not inside any closed area: the outline has a gap, or the point is outside
+        continue;
+      }
+      before.push_back(r->getStyle());
+      t.image->fill(p, style);
+      done.push_back(p);
+    }
+  }
+  if (!done.empty()) {
+    TUndoManager::manager()->add(new FillUndo(t, done, before, style));
+    if (paletteGrew) TTool::getApplication()->getCurrentPalette()->notifyPaletteChanged();
+    changed(t);
+  }
+  return QJsonObject{{"ok", true}, {"painted", (int)done.size()}, {"missed", missed}, {"style", style}};
+}
+
+// A picture of the viewer exactly as the user sees it now (zoom, pan, onion skin and all), written as a PNG.
+QJsonObject opView(const QJsonObject &cmd) {
+  QString path = cmd["path"].toString();
+  if (path.isEmpty()) return fail("path is missing");
+  QWidget *best = nullptr;
+  for (QWidget *w : QApplication::allWidgets())
+    if (w->inherits("SceneViewer") && w->isVisible() && (!best || w->width() * w->height() > best->width() * best->height()))
+      best = w;
+  if (!best) return fail("no viewer is visible in OpenToonz");
+  QOpenGLWidget *gl = qobject_cast<QOpenGLWidget *>(best);
+  QImage img       = gl ? gl->grabFramebuffer() : best->grab().toImage();
+  if (img.isNull() || !img.save(path, "PNG")) return fail("could not capture the viewer");
+  return QJsonObject{{"ok", true}, {"path", path}, {"width", img.width()}, {"height", img.height()}};
+}
+
 QJsonObject run(const QJsonObject &cmd) {
   QString op = cmd["op"].toString();
   if (op == "ping")
@@ -364,6 +445,8 @@ QJsonObject run(const QJsonObject &cmd) {
   if (op == "read") return opRead(cmd);
   if (op == "stroke") return opStroke(cmd);
   if (op == "erase") return opErase(cmd);
+  if (op == "fill") return opFill(cmd);
+  if (op == "view") return opView(cmd);
   if (op == "save") {  // File > Save All, so tools that read the files see what is on screen
     CommandManager::instance()->execute("MI_SaveAll");
     return QJsonObject{{"ok", true}};

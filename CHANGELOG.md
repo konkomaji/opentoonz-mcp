@@ -7,8 +7,16 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Added
+
+- `paint` fills closed areas of a drawing on an ink layer, like a click with the fill tool. OpenToonz does it through the bridge, as one undo step, and it reports the points that were not inside a closed area.
+- `live_view` returns a picture of the OpenToonz viewer as I see it, in a fraction of a second and without saving. The assistant can look after every few strokes.
+- `read_drawing(only_new=true)` returns only the strokes that appeared since the assistant last looked, and counts the ones that are gone.
+- The bridge has two new commands for this, `fill` and `view`.
+
 ### Fixed
 
+- `svgpath` shapes and SVG import raised `TypeError: 'Iterator' object is not iterable` on Python 3.13, from svgelements' subpath iterator. I split the path at its Move commands myself now. heralight reported it.
 - Text shapes needed `C:\Windows\Fontsrialbd.ttf`. They now find a font on Windows, Linux and macOS, and fall back to the font Pillow carries. The OpenToonz process check and one test also named Windows programs. CI now runs the unit tests on Linux too. heralight found these by running the suite on Linux.
 - When OpenToonz could not build a vector level, the error only said "could not build vector levels", because the script output was thrown away. Each script run now keeps its script, stdout, stderr and exit code in `WORK/logs/` (the 5 newest runs and the 5 newest failed runs; `OTMCP_KEEP_SCRIPT_LOGS` changes the count), and the compile and render errors quote OpenToonz's own message and the log folder. A script that hangs is stopped after 600 s with its output kept, and the compile reports the layers it did not build instead of a bare `TimeoutExpired`. One layer that fails no longer stops the layers after it (#9). On Windows OpenToonz prints nothing to stdout, so there the reason is "no .pli written" plus the kept script; OpenToonz's own message shows on Linux.
 
