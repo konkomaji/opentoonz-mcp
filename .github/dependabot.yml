@@ -9,8 +9,9 @@ updates:
         patterns: ["*"]
     ignore:
       # mcp 2.x renamed FastMCP and changed the server API; I move to it deliberately, not via a bot bump.
+      # An update-types rule did not stop the grouped range update (#5, #6), so I name the versions.
       - dependency-name: "mcp"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

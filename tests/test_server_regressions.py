@@ -242,3 +242,31 @@ def test_bounce_start_on_ground_squashes_first_contact():
     want = physics.squash_for(mat, 0, float(mat["e"]))
     assert abs(curve.value_at(sy, 0) - want) < 0.01
     assert abs(curve.value_at(sy, 0) * curve.value_at(sx, 0) - 1) < 0.02  # area preserved
+
+
+@pytest.mark.parametrize("bg,want", [("#000000", (128, 0, 0)), ("#ffffff", (255, 127, 127))])
+def test_straight_alpha_raster_composites_exactly(tmp_path, bg, want):
+    """#10: OpenToonz 1.8.0 premultiplies a PNG level itself. A half-transparent pixel must come out as a plain
+    'over' on the background; flagging the level premultiply="1" multiplies it twice (64 instead of 128)."""
+    from PIL import Image
+    src = tmp_path / "half_red.png"
+    Image.new("RGBA", (320, 180), (255, 0, 0, 128)).save(src)
+    sc = "qa_r_alpha_" + bg[1:3]
+    S.create_scene(sc, width=320, height=180, frames=2, bg_color=bg, overwrite=True)
+    S.add_layer(sc, "piece", mode="raster")
+    S.import_image(sc, "piece", str(src), fit="stretch")
+    S._tcomposer(S._scene_file(sc), tmp_path / "out" / "p..png", (1, 1))
+    got = Image.open(next((tmp_path / "out").glob("p.*.png"))).convert("RGB").getpixel((160, 90))
+    assert all(abs(g - w) <= 2 for g, w in zip(got, want)), got
+
+
+def test_install_replaces_the_target_and_removes_the_build(tmp_path):
+    """The built .pli is copied next to its target before the swap, so it also works across drives (WinError 17)."""
+    built, dst = tmp_path / "work" / "a.pli", tmp_path / "stuff" / "deep" / "a.pli"
+    built.parent.mkdir()
+    built.write_bytes(b"new")
+    dst.parent.mkdir(parents=True)
+    dst.write_bytes(b"old")
+    S._install(built, dst)
+    assert dst.read_bytes() == b"new" and not built.exists()
+    assert [p.name for p in dst.parent.iterdir()] == ["a.pli"]  # no temp file left behind

@@ -569,6 +569,19 @@ def _run_script(lines: list[str], tag: str) -> None:
     sp.unlink(missing_ok=True)
 
 
+def _install(built: Path, dst: Path) -> None:
+    """Put a freshly built file in place atomically. The work folder and the OpenToonz stuff folder can be on
+    different drives, where os.replace fails (WinError 17), so copy next to the target first."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f"{dst.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        shutil.copyfile(built, tmp)
+        os.replace(tmp, dst)
+    finally:
+        tmp.unlink(missing_ok=True)
+    built.unlink(missing_ok=True)
+
+
 def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> dict:
     todo, skipped = [], []
     for lname, L in st["layers"].items():
@@ -622,8 +635,7 @@ def _compile(st: dict, force: bool = False, only: list[str] | None = None) -> di
         if not built.exists():
             failed.append(lname)
             continue
-        pf.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(built, pf)
+        _install(built, pf)
         if L["mode"] == "traced":  # faithful trace: no stylised pressure
             _, strokes = pli.read(str(pf))
             L["dirty"], L["pli_hash"], L["gui_edited"] = False, file_hash(pf), False
