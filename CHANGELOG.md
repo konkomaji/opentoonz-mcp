@@ -7,6 +7,10 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Fixed
+
+- When OpenToonz could not build a vector level, the error only said "could not build vector levels", because the script output was thrown away. Each script run now keeps its script, stdout, stderr and exit code in `WORK/logs/` (the 5 newest runs and the 5 newest failed runs; `OTMCP_KEEP_SCRIPT_LOGS` changes the count), and the compile and render errors quote OpenToonz's own message and the log folder. A script that hangs is stopped after 600 s with its output kept, and the compile reports the layers it did not build instead of a bare `TimeoutExpired`. One layer that fails no longer stops the layers after it (#9). On Windows OpenToonz prints nothing to stdout, so there the reason is "no .pli written" plus the kept script; OpenToonz's own message shows on Linux.
+
 ## [1.0.0] - 2026-11-15
 
 This release is about working together. Until now the assistant and I took turns on a layer, and it could not see what I drew. With ink layers we share one drawing, and with the otbridge plugin it draws in my open OpenToonz window while I watch. I am calling it 1.0.0 because the scene and level formats it writes are now ones OpenToonz itself writes back unchanged, and the tool names are ones I intend to keep.
@@ -23,7 +27,6 @@ This release is about working together. Until now the assistant and I took turns
 
 ### Fixed
 
-- When OpenToonz could not build a vector level, the error only said "could not build vector levels", because the script output was thrown away. Each script run now keeps its script, stdout, stderr and exit code in `WORK/logs/` (the 5 newest runs and the 5 newest failed runs; `OTMCP_KEEP_SCRIPT_LOGS` changes the count), and the compile and render errors quote OpenToonz's own message and the log folder. A script that hangs is stopped after 600 s with its output kept, and the compile reports the layers it did not build instead of a bare `TimeoutExpired`. One layer that fails no longer stops the layers after it (#9).
 - `physics_bounce` with `start_on_ground=true` gave the first contact frame maximum stretch instead of the contact squash, because the squash pass skipped frame 0. It now squashes that frame like every other contact (#7).
 - `preview_frame`, `contact_sheet` and `render` hung for two minutes on a scene with no drawing on the xsheet, because tcomposer waits forever on a scene without frames. They now fail at once with "nothing is drawn yet".
 - Building vector levels failed with `WinError 17` when the work folder and the OpenToonz stuff folder were on different drives, because the finished `.pli` was moved with `os.replace`. I now copy it next to its target and swap it in there. matticusanvil reported it in #8.

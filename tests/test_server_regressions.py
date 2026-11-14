@@ -283,9 +283,13 @@ def test_failed_compile_explains_why_and_keeps_its_log(monkeypatch):
     S.add_layer(sc, "ok"); S.draw(sc, "ok", 1, RECT)
     res = S.compile_vectors(sc)
     assert res["failed"] == ["broken"], res
-    assert any("otmcp test failure" in m for m in res["failed_details"]["broken"])
+    native = sys.platform != "win32"  # OpenToonz.exe is a GUI program on Windows: its print() reaches no pipe
+    if native:
+        assert any("otmcp test failure" in m for m in res["failed_details"]["broken"])
+    else:
+        assert "no .pli written" in res["failed_details"]["broken"][0]
     assert [c["layer"] for c in res["compiled"]] == ["ok"]  # a failing layer no longer stops the next ones
     log = S.Path(res["log"])
     assert (log / "FAILED").exists() and (log / "script.toonzscript").exists() and (log / "stdout.txt").exists()
-    with pytest.raises(RuntimeError, match="otmcp test failure"):
+    with pytest.raises(RuntimeError, match="otmcp test failure" if native else "no .pli written"):
         S.render(sc)

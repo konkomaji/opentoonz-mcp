@@ -630,7 +630,8 @@ def _script_errors(run: dict) -> dict[str, list[str]]:
 
 def _output_tail(run: dict, n: int = 12) -> str:
     text = "\n".join(x for x in (run["stdout"].strip(), run["stderr"].strip()) if x)
-    return "\n".join(text.splitlines()[-n:]) or "(OpenToonz printed nothing)"
+    return "\n".join(text.splitlines()[-n:]) or ("(OpenToonz printed nothing; on Windows it never does, so "
+                                                 "run script.toonzscript from the log folder to see why)")
 
 
 def _install(built: Path, dst: Path) -> None:
