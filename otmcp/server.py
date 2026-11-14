@@ -1604,7 +1604,8 @@ def physics_bounce(scene: str, target: str, start: int, height: float, fall_fram
         smax = float(mat.get("max_stretch", 1.2))
         vmax = max(abs(s_["v"]) for s_ in samples) or 1.0
         for s_ in samples:
-            if s_["contact"] and s_["frame"]:
+            # frame 0 is a contact only when the ball starts on the ground (physics.bounce marks it)
+            if s_["contact"] and (s_["frame"] or start_on_ground):
                 val = physics.squash_for(mat, n_contact, e)
                 n_contact += 1
             else:

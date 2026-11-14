@@ -13,6 +13,7 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ### Fixed
 
+- `physics_bounce` with `start_on_ground=true` gave the first contact frame maximum stretch instead of the contact squash, because the squash pass skipped frame 0. It now squashes that frame like every other contact (#7).
 - The MCP Registry rejected the 0.1.0 `server.json` because its description was over 100 characters. I shortened it, `release_check.py` now enforces the limit, and a manual `registry.yml` workflow re-publishes `server.json` without moving the tag.
 
 ## [0.1.0] - 2026-10-22
