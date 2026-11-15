@@ -96,6 +96,7 @@ def test_region_rig_walks_with_froude_scaling(scene):
     assert "regions" in S.list_regions()
 
 
+@pytest.mark.slow
 def test_dress_and_hat_build_walk_and_render():
     sc = "qa_rig_dress"
     S.create_scene(sc, width=640, height=360, frames=24, overwrite=True)
