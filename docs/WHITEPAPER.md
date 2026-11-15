@@ -1,6 +1,6 @@
 # OpenToonz MCP: an editable, studio-grade 2D animation pipeline for AI assistants
 
-**Author:** konkomaji ([konkomaji.com](https://konkomaji.com/)) · **Version:** 1.1.0 · **Date:** November 2026
+**Author:** konkomaji ([konkomaji.com](https://konkomaji.com/)) · **Version:** 1.1.1 · **Date:** November 2026
 
 ## Abstract
 

@@ -7,6 +7,12 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-15
+
+### Changed
+
+- The README shot is now **Summer hill**, an original scene in the hand-painted tradition of Japanese feature animation: a towering cumulus in four tones, a strip of sea, layered green hills with a cottage and a turning windmill, and a girl in a straw hat walking through grass and flowers. It is 47 tool calls, and `docs/media/making_of_summer_hill.py` replays them. Night walk stays in the README as a second shot.
+
 ### Fixed
 
 - The tool reference check failed on Python 3.13, which strips docstring indentation at compile time. The generator now normalises docstrings, so every Python version writes the same `docs/TOOLS.md`.
@@ -88,7 +94,8 @@ This is the first public release. I built it so an AI assistant can work inside 
 - `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
 - **Packaging.** An `opentoonz-mcp` command, OpenToonz path auto-detection, an MCP Registry `server.json`, and CI and release workflows.
 
-[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/konkomaji/opentoonz-mcp/releases/tag/v0.1.0

@@ -12,9 +12,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/konkomaji/opentoonz-mcp/blob/main/LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
 
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/demo.gif" width="800" alt="Night. A traveller in a red coat walks along a dark ridge toward a lighthouse. A huge moon rises over two mountain ranges, the lighthouse beam sweeps across the sky, fireflies drift, and the camera pushes in and pans with her.">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/demo.gif" width="800" alt="A summer day painted in soft colour. A girl in a straw hat walks along a path on a green hill. Behind her a huge white cumulus cloud stands over a blue sea, a red-roofed cottage and a windmill with turning sails sit on the next hill, seeds drift on the wind, and the camera travels with her.">
 
-<sub><b>Night walk.</b> 96 frames, 10 layers plus a 16-part character rig, seven depth planes, a camera truck and pan, and a bloom pass. Every drawing is an OpenToonz vector level, every move is a keyframe, and the glow is real OpenToonz fx. Open the scene and change anything.</sub>
+<sub><b>Summer hill.</b> An original shot in the hand-painted tradition of Japanese feature animation. 96 frames, 29 layers, ten depth planes, a camera that travels with her, and a soft painted finish. Every drawing is an OpenToonz vector level, every move is a keyframe, and the finish is real OpenToonz fx. Open the scene and change anything.</sub>
 
 <br><br>
 
@@ -40,30 +40,40 @@
 
 ## How this shot was made
 
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/nightwalk-build.png" alt="Four stages of the night walk shot: sky, stars and moon; two mountain ranges with mist; lighthouse, beam and ridge; then the character rig, ink grass, fireflies and the film look">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/summer-hill-build.png" alt="Four stages of the summer hill shot: sky and clouds; sea, hills, trees, cottage and windmill; the near hill with path, grass and flowers; then the girl, her straw hat, drifting seeds and the painted finish">
 
-The whole shot is 41 tool calls. No frame was painted by hand and no video model was involved. In order:
+The whole shot is 47 tool calls. No frame was painted by hand and no image or video model was involved. In order:
 
 | Step | Tools | What happened |
 |:--|:--|:--|
-| **1. Layout** | `create_scene` `add_note` `add_layer` ×10 | A 96-frame scene at 24 fps and ten layers, back to front. The grass layer is an ink layer. |
-| **2. Sky** | `draw` ×3 | Seventeen bands of colour from cold indigo down to a warm horizon, twenty stars, and a moon with craters and two halo rings. |
-| **3. Depth** | `draw` ×2 | Two mountain ranges as SVG paths. The far one is paler and has moonlit faces; mist lies in front of the near one. |
-| **4. Lighthouse** | `draw` ×3 | The tower, its lamp room and glow, the rock, a two-part beam, and the ridge with a moonlit rim. |
-| **5. Character** | `build_character` `walk_cycle` | A 16-part rig with the proportions of a young woman, then a stroll: planted rolling feet, two-bone leg IK, hips on an inverted-pendulum arc, arms opposite the legs. |
-| **6. Grass** | `stroke` ×3 | 43 pen strokes, one per blade, each thick at the root and thin at the tip. |
-| **7. Motion** | `draw` `set_pivot` `set_keyframe` ×8 | Seven fireflies. Then the beam turns about the lamp, the moon rises, and the fireflies drift. |
-| **8. Camera** | `camera_move` ×2 | A truck-in to 86 % and a pan of 150 px. Each plane moves at its own speed: sky 3 %, far range 22 %, near range 45 %, ridge 100 %, grass 170 %. |
-| **9. Look** | `apply_look` | The `anime_satsuei` look: bloom and diffusion as OpenToonz fx nodes you can open in the FX Schematic. |
-| **10. Check and render** | `validate_scene` `render` | OpenToonz rendered 96 frames in 33 seconds. The server checked the frame count, blank frames and flashing. |
+| **1. Layout** | `create_scene` `add_note` `add_layer` ×9 | A 96-frame scene at 24 fps, with the layers back to front. The grass texture on the slope is an ink layer. |
+| **2. Sky** | `draw` | Thirteen bands of blue, deep overhead and pale at the horizon. |
+| **3. Clouds** | `draw` ×2 | The big cumulus is 37 shapes in four tones, laid in the order a background painter works: shaded underside, body, light turning into shade, then the tops the sun reaches. Flat clouds and a smaller tower sit on the horizon. |
+| **4. Sea and hills** | `draw` ×3 | A strip of sea with a bright horizon line, two far headlands, then the middle hill with eleven trees, a cloud's shadow on the grass, a cottage and a windmill tower. |
+| **5. Windmill sails** | `draw` | The sails are their own layer, so they can turn. |
+| **6. Near hill** | `draw` `stroke` | The bank she walks on, its sunlit top and worn path, and 54 short pen marks of grass. |
+| **7. Character** | `build_character` `walk_cycle` `add_layer` `draw` | A 16-part rig with a ten-year-old's proportions and a happy walk: planted rolling feet, two-bone leg IK, hips on an inverted-pendulum arc. Her straw hat is a layer parented to the head, so it follows every nod. |
+| **8. Foreground** | `add_layer` ×3 `draw` ×2 `stroke` ×3 | Eighteen flowers, 43 blades of grass as single pen strokes thick at the root and thin at the tip, and eight seeds in the air. |
+| **9. Motion** | `set_pivot` `set_keyframe` ×9 | The sails turn about their hub, both cloud layers drift, the seeds ride the wind. |
+| **10. Camera** | `camera_move` ×2 | A slight push in and a 150 px pan that travels with her. Each plane moves at its own speed: sky 2 %, the big cloud 8 %, sea 14 %, middle hill 45 %, her hill 100 %, flowers 150 %, grass 170 %. |
+| **11. Finish** | `apply_look` | The `ghibli` look preset: gentle bloom on the highlights, a slightly warmer grade and fine paper grain, as OpenToonz fx nodes you can open in the FX Schematic. |
+| **12. Check and render** | `validate_scene` `render` | OpenToonz rendered 96 frames in about 40 seconds. The server checked the frame count, blank frames and flashing. |
 
-The exact calls, with every coordinate, are in [`docs/media/making_of_nightwalk.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_nightwalk.py). Run it and you get the same scene, ready to edit in OpenToonz.
+The exact calls, with every coordinate, are in [`docs/media/making_of_summer_hill.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_summer_hill.py). Run it and you get the same scene, ready to edit in OpenToonz.
+
+<details>
+<summary><b>Another shot: Night walk</b> (moonrise, a lighthouse beam, a bloom pass)</summary>
+<br>
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/nightwalk-still.png" alt="Night. A traveller in a red coat walks a dark ridge toward a lighthouse under a huge moon; the beam sweeps over two mountain ranges">
+
+41 tool calls: [`docs/media/making_of_nightwalk.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_nightwalk.py).
+</details>
 
 ## Draw together, on the same drawing
 
 <table>
 <tr>
-<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
+<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
 <td>
 
 Every line of this cat is one pen stroke the assistant placed with the `stroke` tool: 26 strokes, each with its own pressure, written straight into an OpenToonz vector level. No script generated it and nothing was traced.
@@ -117,8 +127,8 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 
 <table>
 <tr>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.0/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
 </tr>
 <tr>
 <td align="center"><sub>Cel shadow, wobble and pressure taper, rendered by OpenToonz</sub></td>
