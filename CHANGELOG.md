@@ -7,6 +7,10 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+### Fixed
+
+- The tool reference check failed on Python 3.13, which strips docstring indentation at compile time. The generator now normalises docstrings, so every Python version writes the same `docs/TOOLS.md`.
+
 ## [1.1.0] - 2026-11-15
 
 Paint, a live view of my viewer, and reading only what is new make drawing together practical. The README has a new shot, a night walk, with every tool call that made it. The unit tests now run on Linux.

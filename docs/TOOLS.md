@@ -9,7 +9,7 @@ Install paths, version, scenes, and whether the OpenToonz GUI is running.
 ## `scene_context`
 
 CALL FIRST. Full current state of a scene from disk: settings, layers, timing, keyframes,
-    outside (GUI) changes detected, notes/memory, recent journal, warnings.
+outside (GUI) changes detected, notes/memory, recent journal, warnings.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -36,7 +36,7 @@ Operation history of a scene (every MCP action, outside edits detected, errors).
 ## `style_guide`
 
 Studio animation rules (Ghibli/Disney/anime practice) with numbers: timing, spacing, squash,
-    line weight, shading, camera. topic: 'rules' (numbered defaults) | 'full' | 'styles'.
+line weight, shading, camera. topic: 'rules' (numbered defaults) | 'full' | 'styles'.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -54,7 +54,7 @@ Restore the scene (and any overwritten vector levels) to the state before the la
 ## `create_scene`
 
 Create a scene in the OpenToonz sandbox project.
-    style: anime | feature | cartoon | sketch | clean (line weight, wobble, taper, default timing).
+style: anime | feature | cartoon | sketch | clean (line weight, wobble, taper, default timing).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -70,8 +70,8 @@ Create a scene in the OpenToonz sandbox project.
 ## `import_scene`
 
 Bring an existing OpenToonz .tnz (made in the GUI) under MCP control. Copies it into the sandbox
-    scenes folder if it is elsewhere. Its columns appear as 'foreign_columns' you can key/retime.
-    A scene the MCP already manages is refused unless overwrite=true (its MCP layer data is reset).
+scenes folder if it is elsewhere. Its columns appear as 'foreign_columns' you can key/retime.
+A scene the MCP already manages is refused unless overwrite=true (its MCP layer data is reset).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -94,10 +94,10 @@ Change scene length (frames), fps, background colour, or default drawing style.
 ## `add_layer`
 
 Add a column with its own drawing level. Later layers are drawn ON TOP.
-    mode: 'vector' (shapes -> native OpenToonz vector .pli, editable in GUI, pressure lines) | 'ink' (a vector
-    .pli you and the user both draw on, stroke by stroke: stroke / read_drawing / erase_stroke) | 'raster' (PNG).
-    style: override scene style for this layer (e.g. 'clean' for BG, 'sketch' for effects).
-    parent: 'Table', a peg or another layer. boil: hand-drawn line boil on held drawings.
+mode: 'vector' (shapes -> native OpenToonz vector .pli, editable in GUI, pressure lines) | 'ink' (a vector
+.pli you and the user both draw on, stroke by stroke: stroke / read_drawing / erase_stroke) | 'raster' (PNG).
+style: override scene style for this layer (e.g. 'clean' for BG, 'sketch' for effects).
+parent: 'Table', a peg or another layer. boil: hand-drawn line boil on held drawings.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -155,17 +155,17 @@ Delete a layer (column, level, drawings). Undo-able.
 
 Draw drawing #frame on a layer (held until the next drawing when timing is auto).
 
-    Shapes (canvas px, origin top-left), painted in order:
-      circle{x,y,r} ellipse{x,y,rx,ry,rotation} rect{x,y,w,h,radius,rotation} (x,y=top-left)
-      polygon{points,smooth} path{points,smooth=true,closed} text{x,y,text,size,anchor='mm'}
-      svgpath{d:'M.. C.. A.. Z', transform?} - any SVG path data (detailed art: hair, hands, folds)
-      brush{points:[[x,y,pressure 0-1],...], width:px max, color} - inked stroke with per-point pressure
-    Paint/ink: fill, stroke, stroke_width (px; default from style), opacity, interior=true (thinner
-    interior line), trace_line=true (iro-tore coloured line), shadow=true|{light:deg,depth:px,color}
-    (anime cel shadow; light 90=top, 135=top-left), or shadow={style:'hatch', spacing:px, angle:deg,
-    cross:true, gradient:0-1, jitter:0-1, width:px} for pen hatching of the shadow side (real ink strokes),
-    human=false (perfect geometry), wobble (px).
-    Colours: '#rrggbb', css names or [r,g,b,a].
+Shapes (canvas px, origin top-left), painted in order:
+  circle{x,y,r} ellipse{x,y,rx,ry,rotation} rect{x,y,w,h,radius,rotation} (x,y=top-left)
+  polygon{points,smooth} path{points,smooth=true,closed} text{x,y,text,size,anchor='mm'}
+  svgpath{d:'M.. C.. A.. Z', transform?} - any SVG path data (detailed art: hair, hands, folds)
+  brush{points:[[x,y,pressure 0-1],...], width:px max, color} - inked stroke with per-point pressure
+Paint/ink: fill, stroke, stroke_width (px; default from style), opacity, interior=true (thinner
+interior line), trace_line=true (iro-tore coloured line), shadow=true|{light:deg,depth:px,color}
+(anime cel shadow; light 90=top, 135=top-left), or shadow={style:'hatch', spacing:px, angle:deg,
+cross:true, gradient:0-1, jitter:0-1, width:px} for pen hatching of the shadow side (real ink strokes),
+human=false (perfect geometry), wobble (px).
+Colours: '#rrggbb', css names or [r,g,b,a].
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -189,10 +189,10 @@ Batch draw: drawings=[{"frame": n, "shapes": [...]}, ...]. Use for frame-by-fram
 ## `opentoonz_live`
 
 The live link to a running OpenToonz (needs the otbridge plugin, see bridge/README.md).
-    action: 'status' (is OpenToonz connected, which scene is open, is it unsaved, which cell is the cursor on) |
-    'save' (File > Save All, so preview_frame / render / the files show what is on screen) | 'undo' | 'redo'
-    (Edit > Undo / Redo in OpenToonz). When the scene you work on is open there, stroke, read_drawing and
-    erase_stroke go through this link by themselves: strokes appear at once in the user's viewer.
+action: 'status' (is OpenToonz connected, which scene is open, is it unsaved, which cell is the cursor on) |
+'save' (File > Save All, so preview_frame / render / the files show what is on screen) | 'undo' | 'redo'
+(Edit > Undo / Redo in OpenToonz). When the scene you work on is open there, stroke, read_drawing and
+erase_stroke go through this link by themselves: strokes appear at once in the user's viewer.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -201,14 +201,14 @@ The live link to a running OpenToonz (needs the otbridge plugin, see bridge/READ
 ## `stroke`
 
 Draw by hand on an ink layer: each stroke is one pen line, written straight into the OpenToonz vector
-    level on top of what is already there (yours or the user's). Nothing is regenerated or overwritten.
+level on top of what is already there (yours or the user's). Nothing is regenerated or overwritten.
 
-    strokes: [{"points": [[x, y] or [x, y, pressure 0-1], ...], "width": px at full pressure (default: the
-    style's line), "color": '#rrggbb', "closed": false, "smooth": true}]. Points are canvas px (origin
-    top-left); the line passes through every point (smooth=false joins them with straight segments).
-    Without pressure values the ends are tapered like a pen lift (taper 0 = none, 1 = to a hair).
-    Work like an artist: read_drawing / preview_frame to look, add a few strokes, look again.
-    Lines only: painted areas are made in OpenToonz, or with draw on a vector layer.
+strokes: [{"points": [[x, y] or [x, y, pressure 0-1], ...], "width": px at full pressure (default: the
+style's line), "color": '#rrggbb', "closed": false, "smooth": true}]. Points are canvas px (origin
+top-left); the line passes through every point (smooth=false joins them with straight segments).
+Without pressure values the ends are tapered like a pen lift (taper 0 = none, 1 = to a hair).
+Work like an artist: read_drawing / preview_frame to look, add a few strokes, look again.
+Lines only: painted areas are made in OpenToonz, or with draw on a vector layer.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -221,12 +221,12 @@ Draw by hand on an ink layer: each stroke is one pen line, written straight into
 ## `read_drawing`
 
 Look at a vector drawing as strokes, the user's included: what is on the level file right now.
-    Works on ink and vector layers. Each stroke: index (drawing order, later = on top), by ('mcp' = drawn with
-    stroke, 'other' = the user in OpenToonz or shapes), color, width px, closed, bbox [x0, y0, x1, y1] and
-    points [[x, y, pressure], ...] along the line (canvas px, thinned to max_points). Use it before adding to
-    someone's drawing, then preview_frame to see the result.
-    only_new=true returns just the strokes that appeared since your last read_drawing or stroke on this
-    drawing ('gone' counts the ones that disappeared): the quick way to see what the user just did.
+Works on ink and vector layers. Each stroke: index (drawing order, later = on top), by ('mcp' = drawn with
+stroke, 'other' = the user in OpenToonz or shapes), color, width px, closed, bbox [x0, y0, x1, y1] and
+points [[x, y, pressure], ...] along the line (canvas px, thinned to max_points). Use it before adding to
+someone's drawing, then preview_frame to see the result.
+only_new=true returns just the strokes that appeared since your last read_drawing or stroke on this
+drawing ('gone' counts the ones that disappeared): the quick way to see what the user just did.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -239,7 +239,7 @@ Look at a vector drawing as strokes, the user's included: what is on the level f
 ## `erase_stroke`
 
 Remove strokes from a drawing on an ink layer by index (from read_drawing). Indices are those BEFORE
-    the call; the remaining strokes are renumbered. A stroke that borders a painted area is refused.
+the call; the remaining strokes are renumbered. A stroke that borders a painted area is refused.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -251,10 +251,10 @@ Remove strokes from a drawing on an ink layer by index (from read_drawing). Indi
 ## `paint`
 
 Paint closed areas of a drawing on an ink layer, like clicking with the fill tool: every area that
-    contains one of the points (canvas px) gets the colour. The outline around a point must be closed.
-    Live only: it is done by OpenToonz itself, so the scene must be open there with the otbridge plugin
-    (opentoonz_live shows the link). 'missed' lists points that were not inside a closed area: close the gap
-    with stroke, or move the point. One undo step in OpenToonz.
+contains one of the points (canvas px) gets the colour. The outline around a point must be closed.
+Live only: it is done by OpenToonz itself, so the scene must be open there with the otbridge plugin
+(opentoonz_live shows the link). 'missed' lists points that were not inside a closed area: close the gap
+with stroke, or move the point. One undo step in OpenToonz.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -267,9 +267,9 @@ Paint closed areas of a drawing on an ink layer, like clicking with the fill too
 ## `live_view`
 
 See the OpenToonz viewer exactly as the user sees it right now: their zoom and pan, onion skin, unsaved
-    strokes, everything. It takes a fraction of a second and saves nothing, so use it after every few live
-    strokes to check your work. (preview_frame renders the saved files through the camera instead.)
-    Needs OpenToonz running with the otbridge plugin.
+strokes, everything. It takes a fraction of a second and saves nothing, so use it after every few live
+strokes to check your work. (preview_frame renders the saved files through the camera instead.)
+Needs OpenToonz running with the otbridge plugin.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -278,8 +278,8 @@ See the OpenToonz viewer exactly as the user sees it right now: their zoom and p
 ## `ink_layer`
 
 Turn a vector layer into an ink layer, so you and the user can both keep drawing on it. Its level file
-    becomes the only truth: the shapes it was built from are dropped, it is never recompiled, and edits made in
-    OpenToonz no longer lock it. After this use stroke / read_drawing / erase_stroke; draw no longer applies.
+becomes the only truth: the shapes it was built from are dropped, it is never recompiled, and edits made in
+OpenToonz no longer lock it. After this use stroke / read_drawing / erase_stroke; draw no longer applies.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -290,11 +290,11 @@ Turn a vector layer into an ink layer, so you and the user can both keep drawing
 
 Generate in-betweens (douga) between two key drawings (genga).
 
-    start/end_shapes default to the drawings already on start_frame/end_frame.
-    easing: slow_in_out (studio chart) | snappy | linear | in | out | bounce | elastic | back.
-    step: 1 ones, 2 twos, 3 threes (default: style timing, anime=3, feature=2).
-    arc: bow of the travel path (0.15 = natural arc). squash: 0-1 stretch round shapes along motion.
-    Studio rule: only auto-inbetween 'tight' moves (rotation<=30deg, scale change<=25%); add a breakdown key otherwise.
+start/end_shapes default to the drawings already on start_frame/end_frame.
+easing: slow_in_out (studio chart) | snappy | linear | in | out | bounce | elastic | back.
+step: 1 ones, 2 twos, 3 threes (default: style timing, anime=3, feature=2).
+arc: bow of the travel path (0.15 = natural arc). squash: 0-1 stretch round shapes along motion.
+Studio rule: only auto-inbetween 'tight' moves (rotation<=30deg, scale change<=25%); add a breakdown key otherwise.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -313,7 +313,7 @@ Generate in-betweens (douga) between two key drawings (genga).
 ## `set_exposure`
 
 Xsheet timing for a layer (sets timing=manual). cells[i] = drawing at frame i+1 (0 = blank),
-    or run-length text '1x6 2x6 3x4 0x2' (drawing x frames). Cycle example on twos: '1x2 2x2 3x2 4x2 1x2 ...'.
+or run-length text '1x6 2x6 3x4 0x2' (drawing x frames). Cycle example on twos: '1x2 2x2 3x2 4x2 1x2 ...'.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -324,9 +324,9 @@ Xsheet timing for a layer (sets timing=manual). cells[i] = drawing at frame i+1 
 ## `set_keyframe`
 
 Keyframe a layer, peg, or 'camera' (real OpenToonz keys, editable in GUI Function Editor).
-    x/y: px offset from rest (+y down). rotation: deg CCW. scale*: 1.0=100%. z: depth.
-    interp (segment starting at this key): ease | linear | constant | speed | exp.
-    Camera: scale<1 zooms IN; use exp interp for trucks (natural zoom).
+x/y: px offset from rest (+y down). rotation: deg CCW. scale*: 1.0=100%. z: depth.
+interp (segment starting at this key): ease | linear | constant | speed | exp.
+Camera: scale<1 zooms IN; use exp interp for trucks (natural zoom).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -345,8 +345,8 @@ Keyframe a layer, peg, or 'camera' (real OpenToonz keys, editable in GUI Functio
 ## `set_pivot`
 
 Set the rotation/scale pivot of a layer or peg without moving it (OpenToonz 'center').
-    x,y: canvas px. x='auto': from the layer's drawing bounds; anchor 'bottom' (feet - use for squash
-    on the ground) | 'center' | 'top'. Do this BEFORE squash/stretch or rotation keys.
+x,y: canvas px. x='auto': from the layer's drawing bounds; anchor 'bottom' (feet - use for squash
+on the ground) | 'center' | 'top'. Do this BEFORE squash/stretch or rotation keys.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -371,9 +371,9 @@ Remove keys from a target (optionally one param: x,y,rotation,scale,scale_x,scal
 ## `animate_action`
 
 Move a layer/peg/camera with animation principles baked in (Illusion of Life numbers):
-    anticipation (opposite move, 15% amplitude, 25% of duration, min 3f), main move with slow-in/out,
-    overshoot (10% past target) and damped settle (x0.45 swing) over settle_frames AFTER 'end'.
-    to/from_: {x,y,rotation,scale,scale_x,scale_y} (px/deg/factor). from_ defaults to current value at start.
+anticipation (opposite move, 15% amplitude, 25% of duration, min 3f), main move with slow-in/out,
+overshoot (10% past target) and damped settle (x0.45 swing) over settle_frames AFTER 'end'.
+to/from_: {x,y,rotation,scale,scale_x,scale_y} (px/deg/factor). from_ defaults to current value at start.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -391,10 +391,10 @@ Move a layer/peg/camera with animation principles baked in (Illusion of Life num
 ## `camera_move`
 
 Camera work (satsuei):
-    kind='pan': move view by dx,dy px from start..end (eased 8f). parallax={layer: ratio} makes layers
-      move at ratio of camera speed (sky 0.05, far BG 0.3, mid 0.6, char 1.0, FG 1.8).
-    kind='truck': zoom to 'zoom' scale (0.75 = push in 25%) with exponential interpolation.
-    kind='shake': impact shake starting at 'start', strength px (8 default), decays x0.7/frame on ones.
+kind='pan': move view by dx,dy px from start..end (eased 8f). parallax={layer: ratio} makes layers
+  move at ratio of camera speed (sky 0.05, far BG 0.3, mid 0.6, char 1.0, FG 1.8).
+kind='truck': zoom to 'zoom' scale (0.75 = push in 25%) with exponential interpolation.
+kind='shake': impact shake starting at 'start', strength px (8 default), decays x0.7/frame on ones.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -412,10 +412,10 @@ Camera work (satsuei):
 
 Bring a picture (sketch, scanned drawing, painting, photo, AI image) into a layer.
 
-    Raster layer (mode 'raster'): the image is placed as-is. Traced layer (add_layer mode='traced'):
-    OpenToonz's own vectorizer turns it into editable vector strokes and fills on compile.
-    trace: set the traced layer's method once: 'outline' (colour regions) | 'centerline' (ink lines).
-    box [x,y,w,h] px (default whole canvas); fit contain | cover | stretch | none.
+Raster layer (mode 'raster'): the image is placed as-is. Traced layer (add_layer mode='traced'):
+OpenToonz's own vectorizer turns it into editable vector strokes and fills on compile.
+trace: set the traced layer's method once: 'outline' (colour regions) | 'centerline' (ink lines).
+box [x,y,w,h] px (default whole canvas); fit contain | cover | stretch | none.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -434,8 +434,8 @@ Bring a picture (sketch, scanned drawing, painting, photo, AI image) into a laye
 ## `import_svg`
 
 Import an SVG file (Inkscape/Illustrator/free assets) as editable vector shapes on a drawing.
-    Every path becomes an 'svgpath' shape you can tween, recolour or humanize (human=true adds the
-    hand-drawn wobble/pressure of the layer style). box [x,y,w,h] fits the art (default whole canvas).
+Every path becomes an 'svgpath' shape you can tween, recolour or humanize (human=true adds the
+hand-drawn wobble/pressure of the layer style). box [x,y,w,h] fits the art (default whole canvas).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -450,9 +450,9 @@ Import an SVG file (Inkscape/Illustrator/free assets) as editable vector shapes 
 ## `save_part`
 
 Save a reusable part to the global model-sheet library (head, eye, hand, mouth chart, prop).
-    shapes use the part's own coordinates; anchor [x,y] is its attachment/pivot point.
-    variants: alternative drawings by name, e.g. {"closed": [...], "A": [...], "O": [...]}.
-    Use in any drawing as {"type":"part","name":..,"variant":..,"x","y","scale","rotation","flip"}.
+shapes use the part's own coordinates; anchor [x,y] is its attachment/pivot point.
+variants: alternative drawings by name, e.g. {"closed": [...], "A": [...], "O": [...]}.
+Use in any drawing as {"type":"part","name":..,"variant":..,"x","y","scale","rotation","flip"}.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -469,11 +469,11 @@ Parts in the model-sheet library with their variants.
 ## `physics_bounce`
 
 Physically exact bouncing (gravity parabolas, coefficient of restitution) on a layer/peg.
-    The drawing must rest on the ground line; y offsets go UP from there. height px.
-    fall_frames: frames for the first drop (default: real gravity for a 1.7 m character = 1080 px tall,
-    i.e. 14.1*sqrt(height/1080)). material: rubber_ball | table_tennis | basketball | tennis |
-    soft_rubber | bowling | balloon (sets restitution and squash). travel_x: px moved over the whole bounce,
-    slowing with each contact. squash: area-preserving contact squash (set_pivot at the feet first).
+The drawing must rest on the ground line; y offsets go UP from there. height px.
+fall_frames: frames for the first drop (default: real gravity for a 1.7 m character = 1080 px tall,
+i.e. 14.1*sqrt(height/1080)). material: rubber_ball | table_tennis | basketball | tennis |
+soft_rubber | bowling | balloon (sets restitution and squash). travel_x: px moved over the whole bounce,
+slowing with each contact. squash: area-preserving contact squash (set_pivot at the feet first).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -491,8 +491,8 @@ Physically exact bouncing (gravity parabolas, coefficient of restitution) on a l
 ## `physics_jump`
 
 Recipe jump on a layer/peg: anticipation crouch -> takeoff stretch -> exact parabola -> landing
-    squash -> recovery. style: realistic | feature | cartoon (crouch depth, stretch and squash amounts).
-    air_frames default: real gravity for the scene height (1.7 m character = frame height).
+squash -> recovery. style: realistic | feature | cartoon (crouch depth, stretch and squash amounts).
+air_frames default: real gravity for the scene height (1.7 m character = frame height).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -506,12 +506,12 @@ Recipe jump on a layer/peg: anticipation crouch -> takeoff stretch -> exact para
 ## `follow_through`
 
 Overlapping action / follow-through from a damped spring (second-order system).
-    The target reacts to the driver's motion (driver's `param`, exact OpenToonz values).
-    mode 'follow': target_param = spring(driver)  (a separate object trailing the driver).
-    mode 'offset': target_param = gain * (spring(driver) - driver)  (a part PARENTED to the driver:
-      hair, ears, tail, cloth; use target_param='rotation' with gain in deg per px for a swing).
-    frequency Hz (hair 2-2.5, ears 3, belly 4-5, cape 1.2), damping 0.25-0.5 (overshoot 15-45%),
-    response < 0 anticipates. Keep frequency <= 4 Hz on ones, <= 2.5 Hz on twos (aliasing).
+The target reacts to the driver's motion (driver's `param`, exact OpenToonz values).
+mode 'follow': target_param = spring(driver)  (a separate object trailing the driver).
+mode 'offset': target_param = gain * (spring(driver) - driver)  (a part PARENTED to the driver:
+  hair, ears, tail, cloth; use target_param='rotation' with gain in deg per px for a swing).
+frequency Hz (hair 2-2.5, ears 3, belly 4-5, cape 1.2), damping 0.25-0.5 (overshoot 15-45%),
+response < 0 anticipates. Keep frequency <= 4 Hz on ones, <= 2.5 Hz on twos (aliasing).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -531,7 +531,7 @@ Overlapping action / follow-through from a damped spring (second-order system).
 ## `camera_follow`
 
 Follow a layer/peg with the camera using critically damped smoothing (game-camera SmoothDamp).
-    smooth_time in frames (7 = 0.3 s); axis x | y | xy; offset px added to the followed position.
+smooth_time in frames (7 = 0.3 s); axis x | y | xy; offset px added to the followed position.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -546,8 +546,8 @@ Follow a layer/peg with the camera using critically damped smoothing (game-camer
 ## `blink`
 
 Insert a blink into a layer's xsheet at `start` (switches the layer to manual timing).
-    pattern: standard (H C C H) | quick | anime_twos | physiological | sleepy | double.
-    Drawings: the eye open/half/closed drawing numbers on that layer.
+pattern: standard (H C C H) | quick | anime_twos | physiological | sleepy | double.
+Drawings: the eye open/half/closed drawing numbers on that layer.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -562,9 +562,9 @@ Insert a blink into a layer's xsheet at `start` (switches the layer to manual ti
 ## `lip_sync`
 
 Animate a mouth from text (no audio): each mouth shape is a VARIANT of a library part
-    (anime3: closed/half/open; blair: AI E O U WQ MBP FV L etc rest). Draws one drawing per shape on
-    the layer and writes the xsheet from `start` (2-frame minimum holds). Shift `start` 2 frames
-    earlier than the audio (mouths lead sound).
+(anime3: closed/half/open; blair: AI E O U WQ MBP FV L etc rest). Draws one drawing per shape on
+the layer and writes the xsheet from `start` (2-frame minimum holds). Shift `start` 2 frames
+earlier than the audio (mouths lead sound).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -582,14 +582,14 @@ Animate a mouth from text (no audio): each mouth shape is a VARIANT of a library
 ## `anatomy_reference`
 
 Body proportions for drawing a person, from anthropometric data (Drillis-Contini segment
-    lengths, de Leva masses, CDC/NHANES stature, growth-standard head ratios).
-    person: baby | toddler | boy | girl | child | teen | teen_boy | teen_girl | young_man | young_woman |
-    man | woman | old_man | old_woman (or give age years / label and sex). Returns heights from the floor,
-    segment lengths, front widths, side depths (px), heads tall, mass fractions, centre of mass, notes.
-    Scale: height_px, or px_per_m (340 = 1.75 m adult about 600 px; keep one px_per_m per scene).
-    region (list_regions): population averages from national health surveys (stature, leg length via
-    sitting-height ratio); bmi: a number, or 'average' for the region's surveyed mean (default: a
-    neutral build). Averages only: individuals vary far more than regions do.
+lengths, de Leva masses, CDC/NHANES stature, growth-standard head ratios).
+person: baby | toddler | boy | girl | child | teen | teen_boy | teen_girl | young_man | young_woman |
+man | woman | old_man | old_woman (or give age years / label and sex). Returns heights from the floor,
+segment lengths, front widths, side depths (px), heads tall, mass fractions, centre of mass, notes.
+Scale: height_px, or px_per_m (340 = 1.75 m adult about 600 px; keep one px_per_m per scene).
+region (list_regions): population averages from national health surveys (stature, leg length via
+sitting-height ratio); bmi: a number, or 'average' for the region's surveyed mean (default: a
+neutral build). Averages only: individuals vary far more than regions do.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -608,13 +608,13 @@ Regions with surveyed body averages for anatomy_reference / build_character (reg
 ## `build_character`
 
 Build a side-view cut-out character rig with real proportions for the age and sex.
-    Creates a root peg '<name>' at the hips and 16 vector layers '<name>_<part>' (torso, head, upper arm,
-    forearm, hand, thigh, shin, foot, toe; far side darker and behind), parented like a skeleton with
-    each pivot on its joint. Animate it with walk_cycle / run_cycle, or key the parts directly
-    (rotation on a part turns it about its joint). x: hip x px (default centre); ground_y: floor line px
-    (default 90% of the frame). hair: short | long | bob | ponytail | bun | none.
-    colors: {skin, hair, top, bottom, shoes, line}. region / bmi: as in anatomy_reference (population
-    averages; faces and heads are never varied by region). Every layer stays an editable vector level.
+Creates a root peg '<name>' at the hips and 16 vector layers '<name>_<part>' (torso, head, upper arm,
+forearm, hand, thigh, shin, foot, toe; far side darker and behind), parented like a skeleton with
+each pivot on its joint. Animate it with walk_cycle / run_cycle, or key the parts directly
+(rotation on a part turns it about its joint). x: hip x px (default centre); ground_y: floor line px
+(default 90% of the frame). hair: short | long | bob | ponytail | bun | none.
+colors: {skin, hair, top, bottom, shoes, line}. region / bmi: as in anatomy_reference (population
+averages; faces and heads are never varied by region). Every layer stays an editable vector level.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -636,16 +636,16 @@ Build a side-view cut-out character rig with real proportions for the age and se
 ## `walk_cycle`
 
 Walk a build_character rig with biomechanically correct timing for its age and sex.
-    Feet stay planted and roll heel -> flat -> ball -> toe; legs use two-bone IK; the hips ride an
-    inverted-pendulum arc (low at contact, high at passing); arms swing opposite the legs.
-    Defaults come from gait studies (e.g. adult man 108 steps/min at 1.4 m/s; toddler 154 at 0.86;
-    old age shorter steps). speed m/s, cadence steps/min override them. cycles (default 2) or end.
-    travel=false walks in place (pan the BG). on=2 holds every pose 2 frames (keys become constant).
-    bounce, arm_swing scale the motion (1 = natural; >1 = cartoon); lean adds forward trunk lean (deg).
-    mood (Williams beat chart and character walks): natural | brisk | stroll (16 frames a step) |
-    tired (20, head down, low clearance) | proud (chest out) | happy (double bounce) | sneak (crouched,
-    24 frames) | heavy (long contact, deep down) | cartoon (8 frames). speed/cadence still override.
-    Returns the self-check: cadence, step length, vertical oscillation, knee flexion, foot slip.
+Feet stay planted and roll heel -> flat -> ball -> toe; legs use two-bone IK; the hips ride an
+inverted-pendulum arc (low at contact, high at passing); arms swing opposite the legs.
+Defaults come from gait studies (e.g. adult man 108 steps/min at 1.4 m/s; toddler 154 at 0.86;
+old age shorter steps). speed m/s, cadence steps/min override them. cycles (default 2) or end.
+travel=false walks in place (pan the BG). on=2 holds every pose 2 frames (keys become constant).
+bounce, arm_swing scale the motion (1 = natural; >1 = cartoon); lean adds forward trunk lean (deg).
+mood (Williams beat chart and character walks): natural | brisk | stroll (16 frames a step) |
+tired (20, head down, low clearance) | proud (chest out) | happy (double bounce) | sneak (crouched,
+24 frames) | heavy (long contact, deep down) | cartoon (8 frames). speed/cadence still override.
+Returns the self-check: cadence, step length, vertical oscillation, knee flexion, foot slip.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -667,9 +667,9 @@ Walk a build_character rig with biomechanically correct timing for its age and s
 ## `run_cycle`
 
 Run a build_character rig: spring-mass physics (exact gravity in the flight phase, a spring arc
-    in contact, lowest at mid-stance), planted feet, high knee recovery, bent arms. Defaults by age and
-    sex from jogging norms (adult man about 166 steps/min at 3.3 m/s). Same options as walk_cycle;
-    bounce=1 keeps gravity exact.
+in contact, lowest at mid-stance), planted feet, high knee recovery, bent arms. Defaults by age and
+sex from jogging norms (adult man about 166 steps/min at 3.3 m/s). Same options as walk_cycle;
+bounce=1 keeps gravity exact.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -690,7 +690,7 @@ Run a build_character rig: spring-mass physics (exact gravity in the flight phas
 ## `compile_vectors`
 
 Convert pending vector drawings to native OpenToonz .pli levels with pen-pressure lines.
-    Runs automatically before preview/render/open. force=true also overwrites GUI-edited levels.
+Runs automatically before preview/render/open. force=true also overwrites GUI-edited levels.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -720,7 +720,7 @@ Render several frames into one labelled grid (default 6 spread over the scene) t
 ## `render`
 
 Render with OpenToonz (tcomposer), then double-check: frame count, blank frames, flashing.
-    format: mp4 | gif | png (sequence). shrink 2 = half size (faster drafts).
+format: mp4 | gif | png (sequence). shrink 2 = half size (faster drafts).
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -733,7 +733,7 @@ Render with OpenToonz (tcomposer), then double-check: frame count, blank frames,
 ## `open_in_opentoonz`
 
 Open the scene in the OpenToonz GUI for hand editing (vector levels compiled first).
-    After editing: SAVE in OpenToonz, then the MCP picks up your changes automatically.
+After editing: SAVE in OpenToonz, then the MCP picks up your changes automatically.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -742,7 +742,7 @@ Open the scene in the OpenToonz GUI for hand editing (vector levels compiled fir
 ## `validate_scene`
 
 Double-check a scene: structure, missing files, layer/column mapping, timing gaps, studio rule
-    warnings (holds, pan speed), and optionally a 1-frame test render.
+warnings (holds, pan speed), and optionally a 1-frame test render.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -752,7 +752,7 @@ Double-check a scene: structure, missing files, layer/column mapping, timing gap
 ## `learn_lesson`
 
 Record an insight from reviewing your own output (e.g. 'squash 0.8 looks rubbery; 0.4 reads better
-    for a heavy ball'). Lessons are shown in every later scene_context so future work improves.
+for a heavy ball'). Lessons are shown in every later scene_context so future work improves.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -763,7 +763,7 @@ Record an insight from reviewing your own output (e.g. 'squash 0.8 looks rubbery
 ## `feedback`
 
 Store the USER's rating (1-5) and comment about a result. Ranked highest in lessons/preferences.
-    Ask the user for this after showing a render.
+Ask the user for this after showing a render.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -774,8 +774,8 @@ Store the USER's rating (1-5) and comment about a result. Ranked highest in less
 ## `tune_style`
 
 Permanently adjust a style preset's defaults (learned from feedback). Keys: line, interior, wobble,
-    wavelength, taper_start, taper_end, min_ratio, pressure_var, loop_var, exposure, squash [lo,hi],
-    shadow, overshoot_ends. Applies to all future drawings using that style.
+wavelength, taper_start, taper_end, min_ratio, pressure_var, loop_var, exposure, squash [lo,hi],
+shadow, overshoot_ends. Applies to all future drawings using that style.
 
 | parameter | type | required | default |
 |---|---|---|---|
@@ -803,11 +803,11 @@ Studio looks apply_look can build from real OpenToonz fx, with what each does.
 ## `apply_look`
 
 Give the scene a studio look made of real OpenToonz fx nodes (open the FX Schematic to tweak them).
-    look: ghibli | klaus | spider_verse | comic | anime_satsuei | painterly | cartoon_saloon (list_looks).
-    Whole-frame fx go just before the output; per-layer fx (e.g. Klaus form shadow and rim light) go on
-    `layers` (default: every layer except ones named like bg/background/sky). strength scales the
-    amounts (0.5 subtle, 1 default, 1.5 strong). light_angle: degrees, 90 = light from above,
-    135 = top-left. Re-applying replaces the previous look; fx you made by hand are kept.
+look: ghibli | klaus | spider_verse | comic | anime_satsuei | painterly | cartoon_saloon (list_looks).
+Whole-frame fx go just before the output; per-layer fx (e.g. Klaus form shadow and rim light) go on
+`layers` (default: every layer except ones named like bg/background/sky). strength scales the
+amounts (0.5 subtle, 1 default, 1.5 strong). light_angle: degrees, 90 = light from above,
+135 = top-left. Re-applying replaces the previous look; fx you made by hand are kept.
 
 | parameter | type | required | default |
 |---|---|---|---|
