@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opentoonz-mcp"
-version = "1.1.1"
+version = "1.2.0"
 description = "MCP server that lets AI assistants animate in OpenToonz: real vector levels, xsheet timing, keyframes, physics and studio-style line work."
 readme = "README.md"
 requires-python = ">=3.10"

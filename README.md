@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/konkomaji/opentoonz-mcp/blob/main/LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)](https://modelcontextprotocol.io)
 
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/demo.gif" width="800" alt="A summer day painted in soft colour. A girl in a straw hat walks along a path on a green hill. Behind her a huge white cumulus cloud stands over a blue sea, a red-roofed cottage and a windmill with turning sails sit on the next hill, seeds drift on the wind, and the camera travels with her.">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/demo.gif" width="800" alt="A summer day painted in soft colour. A girl in a straw hat walks along a path on a green hill. Behind her a huge white cumulus cloud stands over a blue sea, a red-roofed cottage and a windmill with turning sails sit on the next hill, seeds drift on the wind, and the camera travels with her.">
 
 <sub><b>Summer hill.</b> An original shot in the hand-painted tradition of Japanese feature animation. 96 frames, 29 layers, ten depth planes, a camera that travels with her, and a soft painted finish. Every drawing is an OpenToonz vector level, every move is a keyframe, and the finish is real OpenToonz fx. Open the scene and change anything.</sub>
 
@@ -33,16 +33,16 @@
 | | |
 |:--|:--|
 | **59 tools** | scenes, layers, drawing, ink strokes, paint, timing, keyframes, physics, rigs, walk and run, camera, fx looks, render |
-| **196 tests** | 57 of them drive the real OpenToonz: they render and compare pixels, or draw in its open window |
+| **214 tests** | 57 of them drive the real OpenToonz: they render and compare pixels, or draw in its open window |
 | **3 ways to draw** | shapes and SVG paths · pen strokes on a shared ink layer · your own art, placed or traced |
 | **2 ways to work together** | through the files, with any OpenToonz 1.8 · live in your open window, with the otbridge plugin |
 | **Windows and Linux** | unit tests run on both in CI; rendering is tested on Windows and confirmed on Linux by a user |
 
 ## How this shot was made
 
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/summer-hill-build.png" alt="Four stages of the summer hill shot: sky and clouds; sea, hills, trees, cottage and windmill; the near hill with path, grass and flowers; then the girl, her straw hat, drifting seeds and the painted finish">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/summer-hill-build.png" alt="Four stages of the summer hill shot: sky and clouds; sea, hills, trees, cottage and windmill; the near hill with path, grass and flowers; then the girl, her straw hat, drifting seeds and the painted finish">
 
-The whole shot is 47 tool calls. No frame was painted by hand and no image or video model was involved. In order:
+The whole shot is 45 tool calls. No frame was painted by hand and no image or video model was involved. In order:
 
 | Step | Tools | What happened |
 |:--|:--|:--|
@@ -52,19 +52,19 @@ The whole shot is 47 tool calls. No frame was painted by hand and no image or vi
 | **4. Sea and hills** | `draw` ×3 | A strip of sea with a bright horizon line, two far headlands, then the middle hill with eleven trees, a cloud's shadow on the grass, a cottage and a windmill tower. |
 | **5. Windmill sails** | `draw` | The sails are their own layer, so they can turn. |
 | **6. Near hill** | `draw` `stroke` | The bank she walks on, its sunlit top and worn path, and 54 short pen marks of grass. |
-| **7. Character** | `build_character` `walk_cycle` `add_layer` `draw` | A 16-part rig with a ten-year-old's proportions and a happy walk: planted rolling feet, two-bone leg IK, hips on an inverted-pendulum arc. Her straw hat is a layer parented to the head, so it follows every nod. |
+| **7. Character** | `build_character` `walk_cycle` | A 17-part rig in the feature design, staged at 40 % of the frame height: a face with an iris, a highlight and blush, a bob under a straw hat with a ribbon, a sun dress with a sash and a skirt that is its own layer, one shadow tone on every colour, a thin warm line, and no seams at the joints. Then a happy walk: planted rolling feet, two-bone leg IK, hips on an inverted-pendulum arc. How the design was arrived at is in [docs/CHARACTER_DESIGN.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/CHARACTER_DESIGN.md). |
 | **8. Foreground** | `add_layer` ×3 `draw` ×2 `stroke` ×3 | Eighteen flowers, 43 blades of grass as single pen strokes thick at the root and thin at the tip, and eight seeds in the air. |
 | **9. Motion** | `set_pivot` `set_keyframe` ×9 | The sails turn about their hub, both cloud layers drift, the seeds ride the wind. |
 | **10. Camera** | `camera_move` ×2 | A slight push in and a 150 px pan that travels with her. Each plane moves at its own speed: sky 2 %, the big cloud 8 %, sea 14 %, middle hill 45 %, her hill 100 %, flowers 150 %, grass 170 %. |
 | **11. Finish** | `apply_look` | The `ghibli` look preset: gentle bloom on the highlights, a slightly warmer grade and fine paper grain, as OpenToonz fx nodes you can open in the FX Schematic. |
-| **12. Check and render** | `validate_scene` `render` | OpenToonz rendered 96 frames in about 40 seconds. The server checked the frame count, blank frames and flashing. |
+| **12. Check and render** | `validate_scene` `render` | OpenToonz rendered 96 frames in about 45 seconds. The server checked the frame count, blank frames and flashing. |
 
 The exact calls, with every coordinate, are in [`docs/media/making_of_summer_hill.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_summer_hill.py). Run it and you get the same scene, ready to edit in OpenToonz.
 
 <details>
 <summary><b>Another shot: Night walk</b> (moonrise, a lighthouse beam, a bloom pass)</summary>
 <br>
-<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/nightwalk-still.png" alt="Night. A traveller in a red coat walks a dark ridge toward a lighthouse under a huge moon; the beam sweeps over two mountain ranges">
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/nightwalk-still.png" alt="Night. A traveller in a red coat walks a dark ridge toward a lighthouse under a huge moon; the beam sweeps over two mountain ranges">
 
 41 tool calls: [`docs/media/making_of_nightwalk.py`](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/media/making_of_nightwalk.py).
 </details>
@@ -73,7 +73,7 @@ The exact calls, with every coordinate, are in [`docs/media/making_of_summer_hil
 
 <table>
 <tr>
-<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
+<td width="56%"><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/ink-cat.png" alt="A cat drawn in ink: tapered whiskers, a red collar, a gold bell, 26 separate pen strokes rendered by OpenToonz"></td>
 <td>
 
 Every line of this cat is one pen stroke the assistant placed with the `stroke` tool: 26 strokes, each with its own pressure, written straight into an OpenToonz vector level. No script generated it and nothing was traced.
@@ -90,6 +90,12 @@ The guide is **[docs/DRAWING_TOGETHER.md](https://github.com/konkomaji/opentoonz
 </td>
 </tr>
 </table>
+
+## Every kind of person
+
+<img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/people-lineup.png" alt="Nine people built by one tool, from a toddler to an old man, with different skin tones, hair, head coverings and clothes">
+
+One `build_character` call each. Age from 1 to 85, ten skin tones, face controls for the individual, seven hair styles, four head coverings and ten outfits, from shorts to a suit to a robe. The reasoning, and what is still missing, is in [docs/CHARACTER_DESIGN.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/CHARACTER_DESIGN.md).
 
 ## Why I built this
 
@@ -116,7 +122,7 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 | ✍️ **A hand-drawn look** | Pen-pressure taper. Subtle line wobble that holds still on held frames. Optional line boil. Anime cel shadows or pen hatching (inspired by p5.brush), and coloured trace lines. Style presets: `anime`, `feature`, `cartoon`, `sketch`, `clean`. |
 | 🎞️ **Animator timing** | In-betweens with slow-in/slow-out, arcs and squash and stretch that keeps the area constant. Xsheet exposure on ones, twos or threes. Blinks and lip sync from text. |
 | 🦘 **Principles built in** | `animate_action` adds anticipation, overshoot and settle using classic proportions. Physics tools do gravity-exact bounces (with material presets), recipe jumps, and spring-based follow-through for hair, tails and cloth. |
-| 🧍 **Real human bodies that walk and run** | `build_character` makes a side-view cut-out rig for any age and sex (toddler, girl, boy, teen, woman, man, old woman, old man) from published body measurements, optionally with regional averages from national health surveys (for example the US, India, West Bengal, Japan, the UK or Nigeria). `walk_cycle` and `run_cycle` animate it from gait studies: planted feet that roll heel to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in the air. Each call reports cadence, step length, knee angles and foot slip so you can check the motion. |
+| 🧍 **Characters that look drawn, on real bodies that walk and run** | `build_character` makes a side-view cut-out rig for any age and sex (toddler, girl, boy, teen, woman, man, old woman, old man) from published body measurements, optionally with regional averages from national health surveys (for example the US, India, West Bengal, Japan, the UK or Nigeria). `walk_cycle` and `run_cycle` animate it from gait studies: planted feet that roll heel to toe, two-bone leg IK, an inverted-pendulum walk and a spring-mass run with exact gravity in the air. Each call reports cadence, step length, knee angles and foot slip so you can check the motion. |
 | 🎬 **Studio looks** | `apply_look` adds a ghibli, klaus, spider_verse, comic, anime_satsuei, painterly or cartoon_saloon look as real OpenToonz fx nodes (bloom, form shadow and rim light, offset colour plates, grain). They stay editable in the FX Schematic, and `remove_look` takes them out cleanly. |
 | 🎥 **Camera work** | Pans with parallax layers, exponential trucks, impact and trauma shake, and a smoothed camera follow. It warns before a move reveals empty background or pans fast enough to strobe. |
 | 🖼️ **Bring your own art** | Import SVG files as editable shapes. Place images, or let OpenToonz's own vectorizer trace them into vector levels. Build a reusable **parts library** (model sheets with variants such as mouth charts). |
@@ -127,8 +133,8 @@ OpenToonz MCP is that bridge. You describe a shot. The assistant lays it out, dr
 
 <table>
 <tr>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
-<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.1.1/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/hand-drawn-vector.png" alt="Vector shapes with cel shadow, wobbly inked lines and pressure taper rendered by OpenToonz"></td>
+<td><img src="https://raw.githubusercontent.com/konkomaji/opentoonz-mcp/v1.2.0/docs/media/brush-and-svgpath.png" alt="SVG-path heart and leaf, and three brush strokes with different pressure curves"></td>
 </tr>
 <tr>
 <td align="center"><sub>Cel shadow, wobble and pressure taper, rendered by OpenToonz</sub></td>
@@ -262,6 +268,7 @@ The same rule holds for ink layers. The `.pli` editor rewrites every level in my
 
 | Document | What is in it |
 |---|---|
+| [docs/CHARACTER_DESIGN.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/CHARACTER_DESIGN.md) | How a scene is made in a studio, what real frames have that a rig lacks, and what the character builder does about it |
 | [docs/DRAWING_TOGETHER.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/DRAWING_TOGETHER.md) | Ink layers and live drawing: the workflow, the tools, worked examples, limits |
 | [bridge/README.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/bridge/README.md) | The otbridge plugin: build, install, safety, protocol |
 | [docs/TOOLS.md](https://github.com/konkomaji/opentoonz-mcp/blob/main/docs/TOOLS.md) | Every tool and parameter |

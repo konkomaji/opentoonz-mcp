@@ -2238,23 +2238,51 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
                     sex: str | None = None, x: float | None = None, ground_y: float | None = None,
                     px_per_m: float = 340.0, facing: str = "right", hair: str = "short",
                     colors: dict | None = None, style: str | None = None, region: str | None = None,
-                    bmi: float | str | None = None) -> dict:
+                    bmi: float | str | None = None, design: str = "feature", outfit: str = "shirt",
+                    hat: str = "none", appeal: float = 0.8, skin_tone: int | None = None,
+                    face: dict | None = None) -> dict:
     """Build a side-view cut-out character rig with real proportions for the age and sex.
     Creates a root peg '<name>' at the hips and 16 vector layers '<name>_<part>' (torso, head, upper arm,
     forearm, hand, thigh, shin, foot, toe; far side darker and behind), parented like a skeleton with
     each pivot on its joint. Animate it with walk_cycle / run_cycle, or key the parts directly
     (rotation on a part turns it about its joint). x: hip x px (default centre); ground_y: floor line px
-    (default 90% of the frame). hair: short | long | bob | ponytail | bun | none.
-    colors: {skin, hair, top, bottom, shoes, line}. region / bmi: as in anatomy_reference (population
-    averages; faces and heads are never varied by region). Every layer stays an editable vector level."""
+    (default 90% of the frame). hair: short | long | bob | ponytail | bun | afro | none.
+    colors: {skin, hair, top, bottom, shoes, line, ribbon, hat, eye, socks}. region / bmi: as in
+    anatomy_reference (population averages; faces and heads are never varied by region).
+    design: 'feature' (default; drawn like a hand-drawn feature character: a face with an eye that has an iris
+    and a highlight, lash, brow and blush, designed hair, one hard shadow tone on every colour, a thin warm line
+    with coloured trace lines on cloth, hands with a thumb, shoes with a sole, and no seams at the joints) |
+    'classic' (the plain rig of 0.1 to 1.1). With 'feature':
+    outfit: shirt | shorts | dress | skirt | long_skirt | tunic (a kurta or long shirt) | robe (a thobe, abaya
+    or gown) | wrap (a kimono or hanbok: hanging sleeves and a broad sash) | suit | coat. Anything that hangs
+    from the waist is its own '<name>_skirt' layer. Set colours with colors{top, bottom, ribbon}.
+    hat: none | straw | cap | headscarf | turban (colour: colors{hat}).
+    skin_tone: 1 (lightest) to 10 (deepest); or give colors{skin} any colour.
+    face: {nose, lips, jaw, brow, eyes}, each -1 to 1, shapes this one person's profile (nose projection, lip
+    fullness, chin, brow ridge, eye opening). Choose them for the individual you are drawing. The tool never
+    ties a face or a skin tone to a region: people of every place vary far more than places do.
+    appeal 0-1 enlarges a child's head toward the 5 to 5.5 heads animation designs use (0 = anatomical).
+    Ages from a baby to 85 work: proportions, posture, grey hair and a few lines of age follow the age.
+    Stage the character large: at least a third of the frame height, or the face cannot be read.
+    Every layer stays an editable vector level."""
     if facing not in ("right", "left"):
         raise ValueError("facing must be right or left")
-    if hair not in ("short", "long", "bob", "ponytail", "bun", "none"):
-        raise ValueError("hair must be short, long, bob, ponytail, bun or none")
+    if hair not in anatomy.HAIR:
+        raise ValueError(f"hair must be one of {list(anatomy.HAIR)}")
     if style and style not in styles.STYLES:
         raise ValueError(f"style must be one of {list(styles.STYLES)}")
     if px_per_m <= 0:
         raise ValueError("px_per_m must be > 0")
+    if design not in ("feature", "classic"):
+        raise ValueError("design must be feature or classic")
+    if outfit not in anatomy.OUTFITS or hat not in anatomy.HEADWEAR:
+        raise ValueError(f"outfit must be one of {list(anatomy.OUTFITS)}; hat one of {list(anatomy.HEADWEAR)}")
+    if skin_tone is not None and not 1 <= int(skin_tone) <= 10:
+        raise ValueError("skin_tone must be 1 (lightest) to 10 (deepest)")
+    if face and set(face) - set(anatomy.FACE_KEYS):
+        raise ValueError(f"face takes {list(anatomy.FACE_KEYS)}, each from -1 to 1")
+    if design == "classic" and hair == "afro":
+        raise ValueError("hair 'afro' needs design='feature'")
     pr = anatomy.proportions(age, sex, person, region, bmi)
     c = Ctx(scene, "build_character", {"name": name, "person": person, "age": pr["age"], "sex": pr["sex"],
                                        "facing": facing, "region": pr["region"], "bmi": pr["bmi"]})
@@ -2271,7 +2299,12 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
         c.warnings.append(f"the character ({hpx:.0f} px tall) does not fit above ground_y={gy:.0f}; "
                           f"lower px_per_m or move the ground down")
     joints = anatomy.rest_joints(pr, hpx, x0, gy)
-    shapes = anatomy.part_shapes(pr, joints, hpx, colors, hair)
+    if design == "feature":
+        shapes = anatomy.feature_shapes(pr, joints, hpx, colors, hair, outfit, hat, appeal, skin_tone, face)
+    else:
+        shapes = anatomy.part_shapes(pr, joints, hpx, colors, hair)
+    order = anatomy.part_order(shapes)
+    parents = dict(anatomy.RIG_PARENTS, **{k: v for k, v in anatomy.EXTRA_PARTS.items() if k in shapes})
     if facing == "left":
         shapes = {k: anatomy.mirror_shapes(v, x0) for k, v in shapes.items()}
 
@@ -2280,7 +2313,7 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
         return (2 * x0 - px if facing == "left" else px), py
 
     layers = {}
-    for part in anatomy.PARTS:  # back to front: later columns draw on top
+    for part in order:  # back to front: later columns draw on top
         lname = f"{rig}_{part}"
         if any(n.lower() == lname.lower() for n in c.st["layers"]):
             raise ValueError(f"layer '{lname}' already exists")
@@ -2292,21 +2325,21 @@ def build_character(scene: str, name: str, person: str | None = None, age: float
     root = c.doc.add_peg(rig, "Table")
     hx, hy = jpos("hip")
     c.doc.set_pivot(root, (hx - W / 2) / dpi, -(hy - H / 2) / dpi)
-    for part, (parent, joint) in anatomy.RIG_PARENTS.items():
+    for part, (parent, joint) in parents.items():
         sid = layers[part]
         c.doc.set_parent(sid, root if parent == "root" else layers[parent])
         px, py = jpos(joint)
         c.doc.set_pivot(sid, (px - W / 2) / dpi, -(py - H / 2) / dpi)
-    for part in anatomy.PARTS:
+    for part in order:
         lname = f"{rig}_{part}"
         _write_drawing(c, lname, 1, shapes[part])
         _retime(c, lname)
     rigs[rig] = {"age": pr["age"], "sex": pr["sex"], "px_per_m": px_per_m, "height_px": hpx, "facing": facing,
                  "stature_m": pr["stature_m"], "region": pr["region"], "bmi": pr["bmi"],
                  "x": x0, "ground_y": gy, "root": rig, "joints": {k: list(v) for k, v in joints.items()},
-                 "parts": {p: f"{rig}_{p}" for p in anatomy.PARTS}}
+                 "parts": {p: f"{rig}_{p}" for p in order}, "design": design}
     ref = anatomy.reference(pr["age"], pr["sex"], height_px=hpx, region=pr["region"], bmi=pr["bmi"])
-    res = {"character": rig, "root_peg": root, "layers": [f"{rig}_{p}" for p in anatomy.PARTS],
+    res = {"character": rig, "root_peg": root, "layers": [f"{rig}_{p}" for p in order],
            "height_px": round(hpx, 1), "heads_tall": ref["heads_tall"], "stature_m": ref["stature_m"],
            "age": pr["age"], "sex": ref["sex"], "notes": ref["notes"]}
     for k in ("region", "caveat", "bmi"):
@@ -2367,7 +2400,7 @@ def _gait_tool(scene: str, character: str, kind: str, start: int, end: int | Non
                      travel=travel, phase=phase, **extras)
     flip = -1.0 if rg["facing"] == "left" else 1.0
     root = c.stage_id(rg["root"])
-    cols = {p: c.stage_id(lname) for p, lname in rg["parts"].items()}
+    cols = {p: c.stage_id(lname) for p, lname in rg["parts"].items() if p in anatomy.PARTS}  # a skirt just hangs
     step = on
     keyed = [i for i in range(0, frames, step)]
 

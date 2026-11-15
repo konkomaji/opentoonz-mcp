@@ -174,3 +174,106 @@ def test_mood_timing_matches_williams_beat_chart():
     assert 23 <= frames_per_step("sneak") <= 28 and 7.5 <= frames_per_step("cartoon") <= 9.5
     with pytest.raises(ValueError):
         gait.apply_mood({}, "angry")
+
+
+def test_feature_design_covers_every_part_and_adds_a_skirt_for_a_dress():
+    pr = anatomy.proportions(person="girl", age=10)
+    j = anatomy.rest_joints(pr, 400, 300, 500)
+    plain = anatomy.feature_shapes(pr, j, 400)
+    assert set(plain) == set(anatomy.PARTS) and all(plain[p] for p in anatomy.PARTS)
+    assert anatomy.part_order(plain) == list(anatomy.PARTS)
+    dress = anatomy.feature_shapes(pr, j, 400, outfit="dress", hat="straw", hair="bob")
+    order = anatomy.part_order(dress)
+    assert set(dress) == set(anatomy.PARTS) | {"skirt"}
+    # the skirt hangs over both legs and under the head and the near arm
+    assert order.index("leg_near_toe") < order.index("skirt") < order.index("head") < order.index("arm_near_upper")
+    assert anatomy.EXTRA_PARTS["skirt"] == ("torso", "hip")
+    assert len(dress["head"]) > len(plain["head"])  # the hat and the shadow of its brim
+
+
+def test_feature_limbs_have_no_line_across_the_joint():
+    """A limb is a fill, a shadow, and an OPEN outline that leaves the upper joint free, so no seam shows."""
+    pr = anatomy.proportions(person="man")
+    j = anatomy.rest_joints(pr, 600, 300, 700)
+    shin = anatomy.feature_shapes(pr, j, 600)["leg_near_shin"]
+    fills = [sh for sh in shin if sh["type"] == "polygon"]
+    lines = [sh for sh in shin if sh["type"] == "path"]
+    assert fills and all(sh["stroke"] is None for sh in fills)
+    assert len(lines) == 1 and lines[0]["closed"] is False
+    kx, ky = j["knee"]
+    assert min(abs(px - kx) + abs(py - ky) for px, py in lines[0]["points"]) > 5  # the line starts below the knee cap
+
+
+def test_appeal_enlarges_a_childs_head_and_leaves_an_adults_alone():
+    def head_height(person, appeal):
+        pr = anatomy.proportions(person=person)
+        j = anatomy.rest_joints(pr, 400, 300, 500)
+        ys = [p[1] for sh in anatomy.feature_shapes(pr, j, 400, appeal=appeal)["head"] for p in sh.get("points", [])]
+        return max(ys) - min(ys)
+    assert head_height("girl", 1.0) > head_height("girl", 0.0) * 1.3
+    assert abs(head_height("man", 1.0) - head_height("man", 0.0)) < 1e-6
+
+
+@pytest.mark.parametrize("outfit", sorted(anatomy.OUTFITS))
+def test_every_outfit_draws_every_part(outfit):
+    for person in ("toddler", "girl", "man", "old_woman"):
+        pr = anatomy.proportions(person=person)
+        j = anatomy.rest_joints(pr, 400, 300, 500)
+        shapes = anatomy.feature_shapes(pr, j, 400, outfit=outfit)
+        assert set(shapes) - {"skirt"} == set(anatomy.PARTS) and all(shapes.values())
+        assert ("skirt" in shapes) == ("skirt" in anatomy.OUTFITS[outfit])
+        if "skirt" in shapes:   # the hem is where the cut says: a robe reaches the ankle, a jacket the hip
+            hem = max(p[1] for p in shapes["skirt"][0]["points"])
+            want = {"hip": j["hip"][1], "thigh": j["hip"][1], "knee": j["knee"][1], "ankle": j["ankle"][1]}
+            length = anatomy.OUTFITS[outfit]["skirt"][1]
+            assert hem > j["hip"][1] and (hem <= want[length] + 4 if length in ("knee", "ankle") else hem < j["knee"][1])
+
+
+def test_skin_tones_run_from_light_to_deep_and_the_line_stays_darker():
+    lum = [anatomy._luma(c) for c in anatomy.SKIN_TONES]
+    assert len(lum) == 10 and lum == sorted(lum, reverse=True)
+    pr = anatomy.proportions(person="woman")
+    j = anatomy.rest_joints(pr, 400, 300, 500)
+    for tone in range(1, 11):
+        head = anatomy.feature_shapes(pr, j, 400, skin_tone=tone)["head"]
+        face = next(sh for sh in head if sh.get("fill") == anatomy.SKIN_TONES[tone - 1] and sh.get("stroke"))
+        assert anatomy._luma(face["stroke"]) < anatomy._luma(face["fill"]) - 0.08   # the outline still reads
+    explicit = anatomy.feature_shapes(pr, j, 400, skin_tone=9, colors={"skin": "#abcdef"})["head"]
+    assert any(sh.get("fill") == "#abcdef" for sh in explicit)   # a colour I give wins over the tone number
+
+
+def test_face_controls_shape_one_profile_and_nothing_ties_them_to_a_region():
+    import inspect
+    pr = anatomy.proportions(person="man")
+    j = anatomy.rest_joints(pr, 400, 300, 500)
+
+    def profile(**face):
+        head = anatomy.feature_shapes(pr, j, 400, face=face)["head"]
+        return max(p[0] for sh in head if sh["type"] == "polygon" and sh.get("stroke") for p in sh["points"])
+    assert profile(nose=1) > profile() > profile(nose=-1)   # the nose is the farthest point forward
+    assert anatomy.feature_shapes(pr, j, 400, face={"lips": 1}) != anatomy.feature_shapes(pr, j, 400)
+    assert anatomy.feature_shapes(pr, j, 400, face={"eyes": -1}) != anatomy.feature_shapes(pr, j, 400)
+    assert "region" not in inspect.signature(anatomy.feature_shapes).parameters
+
+
+def test_a_headscarf_or_turban_covers_the_hair():
+    pr = anatomy.proportions(person="woman")
+    j = anatomy.rest_joints(pr, 400, 300, 500)
+    hair = anatomy.FEATURE_COLORS["hair"]
+    bare = anatomy.feature_shapes(pr, j, 400, hair="long")["head"]
+    assert any(sh.get("fill") == hair for sh in bare)
+    for hat in ("headscarf", "turban"):
+        head = anatomy.feature_shapes(pr, j, 400, hair="long", hat=hat)["head"]
+        assert not any(sh.get("fill") == hair and sh["type"] == "polygon" and sh.get("stroke") for sh in head)
+    afro = anatomy.feature_shapes(pr, j, 400, hair="afro")["head"]
+    assert afro[0]["type"] == "circle" and afro[0]["fill"] == hair   # the mass sits behind the face
+
+
+def test_shadow_tone_is_darker_and_keeps_its_colour():
+    import colorsys
+
+    def hsv(c):
+        return colorsys.rgb_to_hsv(*(int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)))
+    base, shadow = "#f6d2b4", anatomy.kage("#f6d2b4", skin=True)
+    assert hsv(shadow)[2] < hsv(base)[2] and hsv(shadow)[1] > hsv(base)[1]  # darker and richer, not greyer
+    assert anatomy.kage("#ffffff") != "#ffffff" and anatomy.kage("#4b6a9c") != anatomy.kage("#4b6a9c", k=0.5)

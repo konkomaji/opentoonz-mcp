@@ -94,3 +94,26 @@ def test_region_rig_walks_with_froude_scaling(scene):
     assert wb["cadence_spm"] == pytest.approx(wa["cadence_spm"] / ratio, abs=0.1)
     assert wb["legs_reached"] and wb["baked_slip_px"] < 0.5
     assert "regions" in S.list_regions()
+
+
+def test_dress_and_hat_build_walk_and_render():
+    sc = "qa_rig_dress"
+    S.create_scene(sc, width=640, height=360, frames=24, overwrite=True)
+    r = S.build_character(sc, "mia", person="girl", age=10, x=320, ground_y=340, px_per_m=190, outfit="dress",
+                          hat="straw", hair="bob")
+    assert r["verify"] == "ok" and "mia_skirt" in r["layers"] and len(r["layers"]) == len(anatomy.PARTS) + 1
+    ctx = S.Ctx(sc, "t", {}, mutate=False)
+    assert ctx.doc.parent_of(ctx.stage_id("mia_skirt")) == ctx.stage_id("mia_torso")
+    w = S.walk_cycle(sc, "mia", start=1, end=24, travel=False)   # the skirt has no keys of its own: it hangs
+    assert w["verify"] == "ok"
+    S.preview_frame(sc, 7)
+    with pytest.raises(RuntimeError):
+        S.build_character(sc, "x", outfit="kilt")
+    for bad in ({"skin_tone": 0}, {"face": {"ears": 1}}, {"hat": "crown"}, {"hair": "afro", "design": "classic"}):
+        with pytest.raises(RuntimeError):
+            S.build_character(sc, "x", **bad)
+    robe = S.build_character(sc, "sam", person="man", x=500, ground_y=340, px_per_m=150, outfit="robe", hat="turban",
+                             skin_tone=6, face={"nose": 0.8})
+    assert "sam_skirt" in robe["layers"] and S.walk_cycle(sc, "sam", start=1, end=24, travel=False)["verify"] == "ok"
+    classic = S.build_character(sc, "old", person="man", x=120, ground_y=340, px_per_m=150, design="classic")
+    assert len(classic["layers"]) == len(anatomy.PARTS)

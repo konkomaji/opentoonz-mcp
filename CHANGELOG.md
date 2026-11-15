@@ -7,6 +7,22 @@ Every pull request that changes behaviour adds a line under **Unreleased**. A re
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-16
+
+I compared my walking figure with real frames, and it looked like a jointed paper puppet. This release rebuilds how characters are drawn.
+
+### Added
+
+- **The `feature` character design**, now the default of `build_character`. A face with an iris, a highlight, a lash line, a brow and blush. Designed hair with a shadow shape and a sheen. One hard shadow tone on every colour, derived the way a colour designer does it (`anatomy.kage`). A thin warm line, with cloth outlined in a darker tone of itself. Hands with a thumb and shoes with a sole. Limbs are a fill, a shadow and an open outline, so a bent knee or elbow shows no seam.
+- `outfit="dress"` adds a bell skirt as its own layer over the legs, with a sash, short socks and soft sleeves. `hat="straw"` adds a brimmed hat with a ribbon and the shadow of its brim. `appeal` enlarges a child's head toward the 5 to 5.5 heads that animation designs use, without changing the skeleton.
+- **Every kind of person.** `skin_tone` 1 to 10 (the outline, shadow and blush adapt on deep tones). `face` with `nose`, `lips`, `jaw`, `brow` and `eyes` to shape one person's profile. Hair `afro`. Head coverings `cap`, `headscarf` and `turban`. Outfits `shorts`, `skirt`, `long_skirt`, `tunic`, `robe`, `wrap`, `suit` and `coat`, built from a small garment table. People over 60 get a few lines of age. I did not add region presets for faces, and `docs/CHARACTER_DESIGN.md` says why.
+- `docs/CHARACTER_DESIGN.md`: how a scene is made in a studio, what real frames have that the old rig lacked, what the new design does about each point, and what is still missing.
+
+### Changed
+
+- The Summer hill shot uses the new design and stages the girl at 40 % of the frame height. It is 45 tool calls now, because the hat is part of the character.
+- `design="classic"` keeps the plain rig of earlier versions.
+
 ## [1.1.1] - 2026-11-15
 
 ### Changed
@@ -94,7 +110,8 @@ This is the first public release. I built it so an AI assistant can work inside 
 - `apply_look`, `list_looks` and `remove_look` give a scene a studio look built from real OpenToonz fx nodes, which you can open and tweak in the FX Schematic. Looks: ghibli, klaus (form shadow and rim light per layer), spider_verse (offset colour plates), comic, anime_satsuei, painterly, cartoon_saloon. Re-applying replaces the look, removing it restores the file byte for byte, and fx made by hand are kept. I checked that OpenToonz loads and re-saves the graph, and that fx lengths come out in exact pixels.
 - **Packaging.** An `opentoonz-mcp` command, OpenToonz path auto-detection, an MCP Registry `server.json`, and CI and release workflows.
 
-[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/konkomaji/opentoonz-mcp/compare/v0.1.0...v1.0.0

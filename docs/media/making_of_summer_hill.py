@@ -139,24 +139,13 @@ S.stroke(SC, "tufts", 1, [
     {"points": [[x + dx, y, 1.0], [x + dx + lean, y - 10, 0.2]], "width": 3, "color": c, "smooth": False}
     for x, y in TUFTS for dx, lean, c in ((0, -3, "#3f8f3c"), (6, 1, "#9ad873"), (12, 4, "#3f8f3c"))])
 
-# ------------------------------------------------------------------ 7. the girl: a rig with a ten-year-old's proportions, then a walk
-S.build_character(SC, "girl", person="girl", age=10, x=170, ground_y=GROUND, px_per_m=92, facing="right", hair="bob",
-                  style="feature",
-                  colors={"skin": "#f3c9a5", "hair": "#4a2f22", "top": "#fbf7ec", "bottom": "#3f5fa8",
-                          "shoes": "#8a3b2e", "line": "#3a2a26"})
-walk = S.walk_cycle(SC, "girl", start=1, end=FRAMES, mood="happy", travel=True)
-
-# her straw hat rides on the head part of the rig, so it follows every nod of the walk
-head = S._layer_bbox(S._load_state(SC)["layers"]["girl_head"])
-hx, top, hw = (head[0] + head[2]) / 2, head[1], head[2] - head[0]
-S.add_layer(SC, "hat", style="feature", parent="girl_head")
-S.draw(SC, "hat", 1, [
-    {"type": "ellipse", "x": hx - 1, "y": top + hw * 0.30, "rx": hw * 0.98, "ry": hw * 0.20, "fill": "#edd58a",
-     "stroke": "#3a2a26", "stroke_width": 1.6},
-    {"type": "ellipse", "x": hx - 1, "y": top + hw * 0.12, "rx": hw * 0.50, "ry": hw * 0.30, "fill": "#f5e3a4",
-     "stroke": "#3a2a26", "stroke_width": 1.6},
-    flat("rect", x=hx - 1 - hw * 0.50, y=top + hw * 0.20, w=hw * 1.0, h=hw * 0.12, fill="#c8402f"),
-])
+# ------------------------------------------------------------------ 7. the girl: the feature design (face, dress, straw hat, one
+#    shadow tone, thin warm line), staged at 40 % of the frame height so the face can be read, then a walk
+S.build_character(SC, "girl", person="girl", age=10, x=130, ground_y=GROUND, px_per_m=150, facing="right",
+                  hair="bob", outfit="dress", hat="straw", appeal=1.0, style="clean",
+                  colors={"skin": "#f6d2b4", "hair": "#4a3024", "top": "#f7f1e3", "ribbon": "#c9483a",
+                          "shoes": "#7b4a3a", "hat": "#ecd58f", "line": "#4a332a"})
+walk = S.walk_cycle(SC, "girl", start=1, end=FRAMES, mood="happy", speed=0.82, travel=True)
 
 # ------------------------------------------------------------------ 8. foreground, by hand: flowers, then one pen stroke per blade of grass
 S.add_layer(SC, "flowers", style="clean")
@@ -202,7 +191,7 @@ S.set_keyframe(SC, "seeds", 48, x=40, y=-10, interp="ease")
 S.set_keyframe(SC, "seeds", FRAMES, x=120, y=-34, interp="ease")
 
 # ------------------------------------------------------------------ 11. camera: travel with her; every plane at its own speed
-S.camera_move(SC, "truck", start=1, end=FRAMES, zoom=0.93)
+S.camera_move(SC, "truck", start=1, end=FRAMES, zoom=0.90)
 S.camera_move(SC, "pan", start=1, end=FRAMES, dx=150, dy=-4,
               parallax={"sky": 0.02, "cloud_far": 0.05, "cloud_big": 0.08, "sea": 0.14, "hill_far": 0.2,
                         "hill_mid": 0.45, "blades": 0.45, "hill_near": 1.0, "tufts": 1.0, "flowers": 1.5, "grass": 1.7,

@@ -454,6 +454,425 @@ def part_shapes(pr: dict, j: dict, height_px: float, colors: dict | None = None,
     return out
 
 
+# ---------------------------------------------------------------------- the "feature" design
+# What hand-drawn feature characters have and the classic rig above lacks (studied on studio stills):
+# a head enlarged for appeal, a face (eye with iris and highlight, lash, brow, blush), designed hair, a
+# costume that shapes the silhouette, one hard shadow tone per colour, a thin warm line with coloured trace
+# lines on cloth, hands and shoes with a shape, and no visible seams at the joints.
+EXTRA_PARTS = {"skirt": ("torso", "hip")}  # optional parts: parent, pivot joint
+
+
+def part_order(shapes: dict) -> list[str]:
+    """Rig parts back to front, with optional parts in their place (the skirt hangs over the legs)."""
+    order = list(PARTS)
+    if "skirt" in shapes:
+        order.insert(order.index("head"), "skirt")
+    return order
+
+
+def kage(c: str, skin: bool = False, k: float = 0.82) -> str:
+    """The one shadow tone of a colour, the way a colour designer derives it: darker, a little more saturated,
+    hue turned toward blue (toward red-orange for skin). Never the base multiplied by grey."""
+    import colorsys
+    c = c.lstrip("#")
+    r, g, b = (int(c[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    if s > 0.04:
+        target = 0.03 if skin else 0.64  # red-orange, or blue
+        d = ((target - h + 0.5) % 1.0) - 0.5
+        h = (h + max(-0.035, min(0.035, d))) % 1.0
+    r, g, b = colorsys.hsv_to_rgb(h, min(1.0, s * 1.14 + (0.03 if skin else 0.0)), v * k)
+    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def _scale_shapes(shapes: list[dict], cx: float, cy: float, k: float) -> list[dict]:
+    out = []
+    for sh in shapes:
+        sh = dict(sh)
+        if "points" in sh:
+            sh["points"] = [[round(cx + (p[0] - cx) * k, 2), round(cy + (p[1] - cy) * k, 2)] for p in sh["points"]]
+        if "x" in sh:
+            sh["x"], sh["y"] = cx + (sh["x"] - cx) * k, cy + (sh["y"] - cy) * k
+        for key in ("r", "rx", "ry"):
+            if key in sh:
+                sh[key] = sh[key] * k
+        if "stroke_width" in sh:
+            sh["stroke_width"] = sh["stroke_width"] * min(k, 1.15)
+        out.append(sh)
+    return out
+
+
+FEATURE_COLORS = {"skin": "#f6d2b4", "hair": "#4a3024", "top": "#f7f3ea", "bottom": "#4b6a9c", "shoes": "#7b4a3a",
+                  "line": "#4a332a", "ribbon": "#c9483a", "hat": "#ecd58f", "eye": "#3a2a24", "socks": "#f7f3ea"}
+
+
+# Ten skin tones from light to deep, ordered like the Monk Skin Tone scale. The colours are my own cel-paint
+# choices (warmer and cleaner than measurement swatches), not the scale's published values.
+SKIN_TONES = ("#fbe3d0", "#f6d2b4", "#efc19d", "#e3ae86", "#d09a6e", "#b98157", "#9c6843", "#7d5034", "#5f3b28",
+              "#44291d")
+
+# A garment is a few choices, and an outfit is a named set of them. skirt: (shape, where the hem is, colour key).
+OUTFITS = {
+    "shirt": {"sleeve": "auto", "legs": "trousers"},
+    "shorts": {"sleeve": "short", "legs": "shorts"},
+    "dress": {"sleeve": "short", "legs": "bare", "skirt": ("bell", "knee", "top"), "sash": True},
+    "skirt": {"sleeve": "short", "legs": "bare", "skirt": ("bell", "knee", "bottom")},
+    "long_skirt": {"sleeve": "long", "legs": "bare", "skirt": ("bell", "ankle", "bottom")},
+    "tunic": {"sleeve": "long", "legs": "trousers", "skirt": ("straight", "thigh", "top")},     # kurta, long shirt
+    "robe": {"sleeve": "long", "legs": "trousers", "skirt": ("straight", "ankle", "top")},      # thobe, abaya, gown
+    "wrap": {"sleeve": "wide", "legs": "trousers", "skirt": ("straight", "ankle", "top"), "sash": True},  # kimono, hanbok
+    "suit": {"sleeve": "long", "legs": "trousers", "skirt": ("straight", "hip", "top"), "lapel": True},
+    "coat": {"sleeve": "long", "legs": "trousers", "skirt": ("straight", "knee", "top"), "lapel": True},
+}
+HEADWEAR = ("none", "straw", "cap", "headscarf", "turban")
+HAIR = ("short", "long", "bob", "ponytail", "bun", "afro", "none")
+FACE_KEYS = ("nose", "lips", "jaw", "brow", "eyes")
+
+
+def _luma(c: str) -> float:
+    c = c.lstrip("#")
+    r, g, b = (int(c[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def feature_shapes(pr: dict, j: dict, height_px: float, colors: dict | None = None, hair: str = "short",
+                   outfit: str = "shirt", hat: str = "none", appeal: float = 0.6,
+                   skin_tone: int | None = None, face: dict | None = None) -> dict:
+    """Shapes for every rig part in the feature design, in canvas px at the rest pose (facing +x, light from
+    the upper front). outfit: 'shirt' (shirt and trousers) | 'dress' (adds a 'skirt' part). hat: 'none' | 'straw'.
+    appeal 0-1 enlarges a child's head toward the 5 to 5.5 heads that animation designs use.
+    skin_tone 1-10 picks from SKIN_TONES (colors['skin'] wins). face: {nose, lips, jaw, brow, eyes}, each -1..1,
+    shapes the profile of this one person; nothing here is tied to a region."""
+    s = height_px
+    col = dict(FEATURE_COLORS, **(colors or {}))
+    if skin_tone is not None and not (colors or {}).get("skin"):
+        col["skin"] = SKIN_TONES[max(1, min(10, int(skin_tone))) - 1]
+    deep = _luma(col["skin"]) < 0.36
+    if deep and not (colors or {}).get("line"):
+        # a line has to stay clearly darker than the skin it bounds, on the deepest tones too
+        col["line"] = "#2a1a15" if _luma(col["skin"]) >= 0.25 else "#150b08"
+    fc = {k: max(-1.0, min(1.0, float((face or {}).get(k, 0.0)))) for k in FACE_KEYS}
+    cut = OUTFITS[outfit]
+    if pr["age"] >= 65 and not (colors or {}).get("hair"):
+        col["hair"] = "#bdb9b2"
+    line = col["line"]
+    lw = max(0.9, s * 0.0085)
+    female, g = pr["sex"] == "f", min(1.0, max(0.0, (pr["age"] - 1) / 16))
+    legs, sleeve = cut["legs"], cut["sleeve"]
+    bare = legs == "bare"
+    out: dict[str, list[dict]] = {}
+
+    def poly(points, fill, stroke=line, width=1.0, smooth=True):
+        return {"type": "polygon", "points": [[round(x, 2), round(y, 2)] for x, y in points], "smooth": smooth,
+                "fill": fill, "stroke": stroke, "stroke_width": lw * width if stroke else None, "human": True}
+
+    def flat(points, fill, smooth=True, opacity=None):
+        d = {"type": "polygon", "points": [[round(x, 2), round(y, 2)] for x, y in points], "smooth": smooth,
+             "fill": fill, "stroke": None, "human": False}
+        if opacity is not None:
+            d["opacity"] = opacity
+        return d
+
+    def dot(x, y, r, fill, opacity=None):
+        d = {"type": "circle", "x": x, "y": y, "r": r, "fill": fill, "stroke": None, "human": False}
+        if opacity is not None:
+            d["opacity"] = opacity
+        return d
+
+    def stroke(points, color=line, width=1.0, smooth=True):
+        return {"type": "path", "points": [[round(x, 2), round(y, 2)] for x, y in points], "smooth": smooth,
+                "closed": False, "stroke": color, "stroke_width": lw * width}
+
+    def trace(fill):  # iro-tore: cloth is outlined in a darker tone of itself, skin in the warm line colour
+        return kage(fill, k=0.52)
+
+    def limb(a, b, wa, wb, fill, skin=False, mid=None, mid_t=0.4, k=1.0):
+        """A tapered limb with no seam: the fill, a shadow along its back edge, then the outline as an open
+        line down one side, round the far end and up the other. The end at the upper joint has no line, so
+        the limb runs into the part above it the way one drawn arm or leg does."""
+        f = _shade(fill, k)
+        pts = _capsule(a, b, wa, wb, mid, mid_t)
+        L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1e-6
+        nx, ny = -(b[1] - a[1]) / L, (b[0] - a[0]) / L       # toward the back for a limb that hangs down
+        a2 = (a[0] + nx * wa * 0.30 + (b[0] - a[0]) * 0.02, a[1] + ny * wa * 0.30 + (b[1] - a[1]) * 0.02)
+        b2 = (b[0] + nx * wb * 0.30 - (b[0] - a[0]) * 0.04, b[1] + ny * wb * 0.30 - (b[1] - a[1]) * 0.04)
+        return [flat(pts, f),
+                dot(a[0], a[1], wa * 0.5, f),                # rounds the joint when the limb bends
+                flat(_capsule(a2, b2, wa * 0.30, wb * 0.30, mid * 0.30 if mid else None, mid_t),
+                     kage(f, skin, (0.80 if deep else 0.88) if skin else 0.82)),
+                stroke(pts[:-5], line if skin else trace(f))]
+
+    for side, k in (("far", 0.86), ("near", 1.0)):
+        tw, cw, aw = pr["thigh_depth"] * s * 1.0, pr["calf_depth"] * s * 0.95, pr["ankle_depth"] * s
+        thigh_skin, shin_skin = bare, legs in ("bare", "shorts")
+        out[f"leg_{side}_thigh"] = limb(j["hip"], j["knee"], tw * (1.12 if legs == "shorts" else 1.0), cw,
+                                        col["skin"] if thigh_skin else col["bottom"], skin=thigh_skin, k=k)
+        out[f"leg_{side}_shin"] = limb(j["knee"], j["ankle"], cw, aw, col["skin"] if shin_skin else col["bottom"],
+                                       skin=shin_skin, mid=cw * 1.08, mid_t=0.3, k=k)
+        if shin_skin:  # a short sock above the shoe
+            ax, ay = j["ankle"]
+            out[f"leg_{side}_shin"].append(poly(_capsule((ax, ay - 0.045 * s), (ax, ay + 0.004 * s), aw * 1.12, aw * 1.05),
+                                                _shade(col["socks"], k), trace(col["socks"])))
+        shoe = _shade(col["shoes"], k)
+        hx, gy = j["heel"]
+        ax, ay = j["ankle"]
+        bx, tx = j["ball"][0], j["toe"][0]
+        fh = pr["foot_height"] * s
+        out[f"leg_{side}_foot"] = [
+            poly([(hx - 0.02 * fh, gy - 0.30 * fh), (hx + 0.12 * fh, ay - 0.30 * fh), (ax + 0.28 * fh, ay - 0.50 * fh),
+                  (bx - 0.05 * fh, gy - 0.78 * fh), (bx + 0.16 * fh, gy - 0.10 * fh), (hx + 0.2 * fh, gy)], shoe, trace(shoe)),
+            flat([(hx, gy - 0.16 * fh), (bx + 0.1 * fh, gy - 0.16 * fh), (bx + 0.14 * fh, gy - 0.02 * fh),
+                  (hx + 0.16 * fh, gy - 0.01 * fh)], kage(shoe))]                        # the sole in shade
+        out[f"leg_{side}_toe"] = [
+            poly([(bx - 0.25 * fh, gy - 0.74 * fh), (tx - 0.22 * fh, gy - 0.56 * fh), (tx + 0.06 * fh, gy - 0.14 * fh),
+                  (bx - 0.25 * fh, gy)], shoe, trace(shoe)),
+            dot(bx - 0.12 * fh, gy - 0.40 * fh, 0.30 * fh, shoe)]                        # hides the seam with the foot
+        uw, fw, ww = pr["upper_arm_depth"] * s * 1.05, pr["forearm_depth"] * s * 0.98, pr["wrist_depth"] * s
+        short_sleeve = sleeve == "short" or (sleeve == "auto" and pr["age"] < 14)
+        wide = sleeve == "wide"
+        hand_w = ww
+        if wide:   # a hanging sleeve, as on a kimono or a hanbok
+            uw, fw, ww = uw * 1.25, fw * 1.9, ww * 2.6
+        arm_fill = col["skin"] if short_sleeve else col["top"]
+        upper = limb(j["shoulder"], j["elbow"], uw, fw, arm_fill, skin=short_sleeve, k=k)
+        sx, sy = j["shoulder"]
+        ex, ey = j["elbow"]
+        top = _shade(col["top"], k)
+        if short_sleeve:   # the sleeve: a soft bell from the shoulder to above the elbow
+            t = 0.52 if "skirt" in cut else 0.62
+            mx, my = sx + (ex - sx) * t, sy + (ey - sy) * t
+            upper += [poly([(sx - uw * 0.62, sy - uw * 0.30), (sx, sy - uw * 0.62), (sx + uw * 0.66, sy - uw * 0.22),
+                            (mx + uw * 0.74, my - uw * 0.05), (mx + uw * 0.50, my + uw * 0.16),
+                            (mx - uw * 0.50, my + uw * 0.16), (mx - uw * 0.72, my - uw * 0.05)], top, trace(top)),
+                      flat([(sx - uw * 0.52, sy - uw * 0.10), (mx - uw * 0.60, my - uw * 0.02),
+                            (mx - uw * 0.40, my + uw * 0.10), (mx - uw * 0.05, my + uw * 0.10),
+                            (sx - uw * 0.10, sy)], kage(top))]
+        out[f"arm_{side}_upper"] = upper
+        out[f"arm_{side}_fore"] = limb(j["elbow"], j["wrist"], fw, ww, arm_fill if short_sleeve else col["top"],
+                                       skin=short_sleeve, k=k)
+        skin = _shade(col["skin"], k)
+        wx, wy = j["wrist"]
+        fx, fy = j["fingertip"]
+        hl_ = math.hypot(fx - wx, fy - wy) or 1e-6
+        ux, uy = (fx - wx) / hl_, (fy - wy) / hl_
+        px_, py_ = -uy, ux                                                                # toward the back of the hand
+        hw = hand_w * 1.25
+
+        def H(t, w, wx=wx, wy=wy, ux=ux, uy=uy, hl_=hl_, px_=px_, py_=py_, hw=hw):
+            return (wx + ux * hl_ * t + px_ * hw * w, wy + uy * hl_ * t + py_ * hw * w)
+        out[f"arm_{side}_hand"] = [
+            poly([H(-0.05, 0.46), H(0.30, 0.56), H(0.62, 0.50), H(0.94, 0.30), H(1.02, 0.02), H(0.92, -0.26),
+                  H(0.60, -0.42), H(0.46, -0.44), H(0.40, -0.78), H(0.22, -0.84), H(0.12, -0.52), H(-0.05, -0.46)],
+                 skin),                                                                   # mitten with a thumb
+            dot(wx, wy, hand_w * 0.52, skin),
+            stroke([H(0.56, 0.10), H(0.92, 0.06)], kage(skin, True), 0.8, False),         # the fingers, one line
+            flat([H(0.30, 0.50), H(0.62, 0.44), H(0.90, 0.26), H(0.84, 0.20), H(0.34, 0.36)], kage(skin, True, 0.9))]
+
+    # ---- torso in profile
+    hx, hy = j["hip"]
+    sx, sy = j["shoulder"]
+    nx, ny = j["neck"]
+    cd, wd, bd = pr["chest_depth"] * s, pr["waist_depth"] * s, pr["buttock_depth"] * s
+    p = puberty(pr["age"])
+    bust = (pr["bust_depth"] - pr["chest_depth"]) * s if female else 0.0
+    waist_y = hy - 0.45 * (hy - sy)
+    chest_y = sy + 0.30 * (hy - sy)
+    nd = pr["neck_depth"] * s
+    top = col["top"]
+    torso = [(nx - 0.42 * nd, ny), (sx - 0.5 * cd, sy + 0.02 * s), (sx - 0.51 * cd, chest_y),
+             (hx - 0.45 * wd, waist_y), (hx - 0.525 * bd, hy - 0.01 * s), (hx - 0.25 * bd, hy + 0.06 * s),
+             (hx + 0.45 * bd, hy + 0.045 * s),
+             (hx + 0.55 * wd + (0.04 * s * (1 - p) if pr["age"] < 8 else 0), waist_y + 0.02 * s),
+             (sx + 0.52 * cd + bust * 1.6, chest_y + (0.015 * s if bust else 0)), (sx + 0.45 * cd, sy + 0.03 * s),
+             (nx + 0.42 * nd, ny)]
+    body = [poly(torso, top, trace(top)),
+            flat([(sx - 0.44 * cd, sy + 0.05 * s), (sx - 0.46 * cd, chest_y), (hx - 0.40 * wd, waist_y),
+                  (hx - 0.46 * bd, hy - 0.01 * s), (hx - 0.20 * bd, hy + 0.03 * s), (hx - 0.12 * wd, waist_y),
+                  (sx - 0.16 * cd, chest_y)], kage(top))]                                 # the back in shade
+    skirt_cut = cut.get("skirt")
+    if not skirt_cut or skirt_cut[2] == "bottom":
+        bot = col["bottom"]
+        body += [poly([(hx - 0.53 * bd, hy - 0.045 * s), (hx - 0.25 * bd, hy + 0.06 * s), (hx + 0.45 * bd, hy + 0.045 * s),
+                       (hx + 0.56 * wd, hy - 0.045 * s)], bot, trace(bot)),
+                 stroke([(hx - 0.50 * bd, hy - 0.045 * s), (hx + 0.54 * wd, hy - 0.045 * s)], trace(bot), 1.2, False)]
+    body.append(poly([(nx + 0.44 * nd, ny - 0.004 * s), (nx + 0.10 * nd, ny + 0.012 * s), (sx + 0.30 * cd, sy + 0.075 * s),
+                      (sx + 0.47 * cd, sy + 0.045 * s)], "#ffffff", trace("#e9e4da")))  # collar
+    if cut.get("lapel"):   # a jacket front: a dark V and one lapel line
+        body += [flat([(nx + 0.40 * nd, ny + 0.004 * s), (sx + 0.50 * cd, sy + 0.07 * s), (sx + 0.40 * cd, chest_y + 0.06 * s)],
+                      "#ffffff"),
+                 stroke([(nx + 0.36 * nd, ny + 0.01 * s), (sx + 0.40 * cd, chest_y + 0.07 * s), (hx + 0.50 * wd, waist_y)],
+                        trace(top), 1.0)]
+    out["torso"] = body
+    if skirt_cut:   # everything that hangs from the waist: a skirt, a tunic, a robe, the skirt of a jacket
+        shape, length, key = skirt_cut
+        ky, ay_ = j["knee"][1], j["ankle"][1]
+        hem = {"hip": hy + 0.085 * s, "thigh": hy + 0.55 * (ky - hy), "knee": ky - 0.035 * s,
+               "ankle": ay_ - 0.035 * s}[length]
+        top = col[key]
+        rib = col["ribbon"]
+        drop = (hem - hy) / s
+        spread = (0.075 + 0.26 * drop) if shape == "bell" else (0.060 + 0.115 * drop)   # half width at the hem
+        xb, xf = hx - spread * s - 0.02 * s, hx + spread * s + 0.02 * s
+        up = min(0.12 * s, 0.45 * (hem - hy))        # how far above the hem the cloth reaches its full width
+        skirt = [(hx - 0.47 * wd, waist_y - 0.004 * s), (hx - 0.56 * bd, hy - 0.01 * s), (xb + 0.02 * s, hem - up),
+                 (xb, hem - 0.012 * s), (xb + 0.05 * s, hem + 0.010 * s), (hx - 0.03 * s, hem + 0.022 * s),
+                 (hx + 0.06 * s, hem + 0.016 * s), (xf - 0.03 * s, hem + 0.004 * s), (xf, hem - 0.022 * s),
+                 (xf - 0.03 * s, hem - up), (hx + 0.60 * wd, hy - 0.01 * s), (hx + 0.57 * wd, waist_y + 0.012 * s)]
+        hang = [
+            poly(skirt, top, trace(top)),
+            flat([(hx - 0.44 * wd, waist_y + 0.01 * s), (hx - 0.52 * bd, hy), (xb + 0.035 * s, hem - up),
+                  (xb + 0.02 * s, hem - 0.014 * s), (xb + 0.06 * s, hem + 0.004 * s), (hx - 0.3 * spread * s, hem + 0.014 * s),
+                  (hx - 0.4 * spread * s, hem - up), (hx - 0.10 * wd, hy)], kage(top))]   # the back in shade
+        if hem - hy > 0.14 * s:   # two folds, when the cloth is long enough to have them
+            hang += [stroke([(hx + 0.02 * s, hy + 0.05 * s), (hx + 0.2 * spread * s, hem - 0.05 * s),
+                             (hx + 0.24 * spread * s, hem + 0.012 * s)], trace(top), 0.75),
+                     stroke([(hx + 0.26 * wd + 0.03 * s, hy + 0.07 * s), (xf - 0.055 * s, hem - 0.035 * s)],
+                            trace(top), 0.75)]
+        if cut.get("sash"):
+            band = 0.045 * s if sleeve == "wide" else 0.020 * s        # an obi is broad, a dress sash narrow
+            hang += [poly([(hx - 0.50 * wd, waist_y - band * 0.7), (hx + 0.60 * wd, waist_y - band * 0.5),
+                           (hx + 0.60 * wd, waist_y + band * 0.8), (hx - 0.50 * wd, waist_y + band * 0.7)],
+                          rib, trace(rib), smooth=False),
+                     poly([(hx - 0.50 * wd, waist_y), (hx - 0.50 * wd - 0.045 * s, waist_y + 0.035 * s),
+                           (hx - 0.50 * wd - 0.030 * s, waist_y + 0.085 * s), (hx - 0.50 * wd - 0.006 * s, waist_y + 0.03 * s)],
+                          rib, trace(rib))]                                               # its tail at the back
+        elif cut.get("lapel") or key == "bottom":
+            hang.append(stroke([(hx - 0.48 * wd, waist_y + 0.004 * s), (hx + 0.58 * wd, waist_y + 0.012 * s)],
+                               trace(top), 1.0, False))                                   # a waist seam
+        out["skirt"] = hang
+        top = col["top"]
+
+    # ---- head in profile
+    tx, ty = j["head_top"]
+    cx, cy = j["chin"]
+    hh = cy - ty
+    hl = pr["head_length"] * s
+    hcx = tx - 0.02 * hl
+    fem = 1.0 if female else 0.0
+
+    def P(fx, fy_adult, fy_child=None):
+        fy = fy_adult if fy_child is None else fy_child + (fy_adult - fy_child) * g
+        return (hcx + fx * hl, ty + fy * hh)
+
+    skin, hc = col["skin"], col["hair"]
+    nose = 0.49 + 0.09 * g - 0.02 * fem + 0.050 * fc["nose"]
+    lip, jaw, brow = 0.028 * fc["lips"], 0.035 * fc["jaw"], 0.022 * fc["brow"]
+    outline = [P(0.00, 0.00), P(0.30, 0.07, 0.10), P(0.45 - 0.02 * fem + brow, 0.30, 0.42),
+               P(0.43 + 0.018 * fc["nose"], 0.38, 0.50), P(nose, 0.56, 0.64), P(0.46, 0.62, 0.70),
+               P(0.485 + lip, 0.70, 0.77), P(0.45 + lip * 0.3, 0.74, 0.80), P(0.47 + lip, 0.78, 0.84),
+               P(0.43 + jaw, 0.92, 0.94), P(0.31 + jaw * 0.6, 1.00), P(0.15, 0.95), P(-0.02, 0.80, 0.84),
+               P(-0.22, 0.72), P(-0.48, 0.55), P(-0.53, 0.33), P(-0.38, 0.09)]
+    neck_top = (hcx - 0.05 * hl, ty + 0.80 * hh)
+    head = [poly(_capsule((nx, ny + 0.012 * s), neck_top, nd, nd * 0.92), skin),
+            flat(_capsule((nx - nd * 0.10, ny + 0.004 * s), (neck_top[0] - nd * 0.02, neck_top[1] + 0.02 * hh),
+                          nd * 0.72, nd * 0.70), kage(skin, True, 0.88)),                 # the neck under the jaw
+            poly(outline, skin),
+            flat([P(0.12, 0.95), P(-0.02, 0.82, 0.86), P(-0.20, 0.74), P(-0.42, 0.58), P(-0.30, 0.60),
+                  P(-0.10, 0.70, 0.74), P(0.10, 0.84, 0.88), P(0.26, 0.96)], kage(skin, True, 0.9))]  # under the jaw line
+    lx, ly = P(-0.08, 0.50, 0.58)
+    head += [{"type": "ellipse", "x": lx, "y": ly, "rx": 0.075 * hl, "ry": 0.115 * hh, "fill": skin, "stroke": line,
+              "stroke_width": lw * 0.9},
+             stroke([(lx + 0.02 * hl, ly - 0.05 * hh), (lx - 0.02 * hl, ly), (lx + 0.02 * hl, ly + 0.05 * hh)],
+                    kage(skin, True, 0.7), 0.7)]
+    ex, ey = P(0.31, 0.43, 0.54)
+    er = (0.058 + 0.040 * (1 - g)) * hl * (1 + 0.30 * appeal)                # children's eyes are larger
+    bx_, by_ = P(0.22, 0.60, 0.68)
+    open_ = 1.0 + 0.28 * fc["eyes"]                                           # rounder (+) or narrower (-)
+    head += [dot(bx_, by_, er * 1.25, "#b5503c" if deep else "#f29a8a", 0.30 if deep else 0.32),   # blush
+             {"type": "ellipse", "x": ex, "y": ey, "rx": er * 0.72, "ry": er * open_, "fill": "#ffffff", "stroke": None,
+              "human": False},
+             {"type": "ellipse", "x": ex + er * 0.14, "y": ey + er * 0.06 * open_, "rx": er * 0.50,
+              "ry": er * 0.84 * open_, "fill": col["eye"], "stroke": None, "human": False},
+             dot(ex + er * 0.02, ey - er * 0.36, er * 0.24, "#ffffff"),                    # the light in the eye
+             stroke([(ex - er * 0.80, ey - er * 0.62 * open_), (ex - er * 0.10, ey - er * 1.06 * open_),
+                     (ex + er * 0.70, ey - er * 0.72 * open_)], line, 1.7),               # upper lash
+             stroke([P(0.24 - 0.02 * (1 - g), 0.325, 0.435), P(0.34, 0.300, 0.410), P(0.42, 0.318, 0.428)],
+                    kage(hc, k=0.9), 1.3)]                                                 # brow
+    mx, my = P(0.36, 0.765, 0.820)
+    head.append(stroke([(mx, my), (mx + 0.055 * hl, my + 0.012 * hh), (mx + (0.10 + lip) * hl, my - 0.004 * hh)],
+                       kage(skin, True, 0.55), 0.9 + 0.5 * max(0.0, fc["lips"])))          # a small smile
+    if pr["age"] >= 60:   # age shows in a few lines, not in many
+        wr = kage(skin, True, 0.72)
+        head += [stroke([(ex + er * 1.2, ey + er * 0.2), (ex + er * 2.0, ey - er * 0.2)], wr, 0.7),
+                 stroke([(ex + er * 1.2, ey + er * 0.7), (ex + er * 2.0, ey + er * 0.9)], wr, 0.7),
+                 stroke([(mx - 0.03 * hl, my - 0.10 * hh), (mx - 0.06 * hl, my + 0.02 * hh)], wr, 0.7),
+                 stroke([P(0.10, 0.20, 0.3), P(0.30, 0.19, 0.29)], wr, 0.7)]
+    if hat == "straw":   # the brim throws its shadow across the forehead
+        head.append(flat([P(0.44, 0.30, 0.40), P(0.30, 0.08, 0.11), P(-0.20, 0.10), P(-0.30, 0.34),
+                          P(0.10, 0.36, 0.44)], kage(skin, True), opacity=0.9))
+    covered = hat in ("headscarf", "turban")
+    if hair == "afro" and not covered:   # a round mass of tight curls behind the face, then the hairline over it
+        ac = P(-0.12, 0.22)
+        R = 0.74 * hl
+        head[0:0] = [{"type": "circle", "x": ac[0], "y": ac[1], "r": R, "fill": hc, "stroke": kage(hc, k=0.6),
+                      "stroke_width": lw},
+                     dot(ac[0] - R * 0.24, ac[1] + R * 0.14, R * 0.66, kage(hc))]
+    if hair != "none" and not covered:
+        drop = {"long": 1.30, "bob": 0.92, "ponytail": 0.62}.get(hair, 0.60)
+        cap = [P(-0.50, drop), P(-0.57, 0.30), P(-0.37, 0.03), P(0.02, -0.05), P(0.31, 0.03, 0.07),
+               P(0.43, 0.17, 0.25), P(0.36, 0.30, 0.40), P(0.26, 0.22, 0.30), P(0.14, 0.33, 0.42),
+               P(0.02, 0.24, 0.32), P(-0.06, 0.40, 0.48), P(-0.14, 0.62, 0.68)]
+        if hair in ("long", "bob", "ponytail"):
+            cap += [P(-0.20, drop * 0.94), P(-0.33, drop * 1.02)]
+        head += [poly(cap, hc, kage(hc, k=0.6)),
+                 flat([P(-0.50, drop * 0.98), P(-0.56, 0.32), P(-0.42, 0.14), P(-0.34, 0.40), P(-0.36, drop * 0.96)],
+                      kage(hc)),                                                           # the back of the hair in shade
+                 stroke([P(-0.22, 0.10), P(-0.02, 0.05), P(0.18, 0.12, 0.15)], _shade_up(hc, 1.5), 1.6)]  # sheen
+        if hair == "ponytail":
+            head.append(poly([P(-0.48, 0.30), P(-0.88, 0.44), P(-0.84, 0.98), P(-0.66, 1.06), P(-0.56, 0.56)], hc,
+                             kage(hc, k=0.6)))
+        if hair == "bun":
+            qx, qy = P(-0.46, 0.12)
+            head.append({"type": "circle", "x": qx, "y": qy, "r": 0.2 * hl, "fill": hc, "stroke": kage(hc, k=0.6),
+                         "stroke_width": lw})
+    if hat == "headscarf":   # one cloth over the hair and round the neck, open at the face
+        sc = col["hat"]
+        head += [poly([P(0.36, 0.20, 0.28), P(0.30, 0.02, 0.05), P(0.00, -0.07), P(-0.40, 0.02), P(-0.60, 0.32),
+                       P(-0.56, 0.74), P(-0.40, 1.12), P(-0.05, 1.26), P(0.30, 1.18), P(0.34, 1.02), P(0.14, 0.97),
+                       P(0.00, 0.80, 0.84), P(0.02, 0.56, 0.62), P(0.16, 0.34, 0.42)], sc, trace(sc)),
+                 flat([P(-0.58, 0.36), P(-0.54, 0.74), P(-0.40, 1.10), P(-0.16, 1.20), P(-0.30, 0.80), P(-0.36, 0.40)],
+                      kage(sc)),
+                 stroke([P(0.02, 0.62, 0.68), P(-0.10, 0.98), P(-0.02, 1.20)], trace(sc), 0.75)]
+    if hat == "turban":      # cloth wound round the head, a little forward of the crown
+        sc = col["hat"]
+        head += [poly([P(0.42, 0.22, 0.30), P(0.40, 0.02), P(0.14, -0.20), P(-0.22, -0.22), P(-0.52, -0.04),
+                       P(-0.60, 0.26), P(-0.46, 0.44), P(-0.10, 0.34), P(0.20, 0.28)], sc, trace(sc)),
+                 flat([P(-0.56, 0.02), P(-0.60, 0.26), P(-0.46, 0.42), P(-0.22, 0.36), P(-0.34, 0.10)], kage(sc)),
+                 stroke([P(0.36, 0.10), P(0.00, 0.02), P(-0.40, 0.20)], trace(sc), 0.75),
+                 stroke([P(0.30, -0.04), P(-0.06, -0.12), P(-0.46, 0.02)], trace(sc), 0.75)]
+    if hat == "cap":
+        sc = col["hat"]
+        head += [poly([P(0.34, 0.16, 0.22), P(0.30, 0.00), P(0.00, -0.10), P(-0.36, -0.02), P(-0.52, 0.22),
+                       P(-0.20, 0.20), P(0.10, 0.18)], sc, trace(sc)),
+                 poly([P(0.30, 0.13, 0.19), P(0.78, 0.20, 0.26), P(0.80, 0.25, 0.31), P(0.32, 0.21, 0.27)], kage(sc),
+                      trace(sc))]
+    if hat == "straw":
+        hatc, rib = col["hat"], col["ribbon"]
+        by = ty + 0.10 * hh
+        head += [
+            poly([P(-0.50, 0.50), P(-0.66, 0.66), P(-0.60, 0.98), P(-0.50, 0.70)], rib, trace(rib)),  # ribbon tail
+            {"type": "ellipse", "x": hcx - 0.02 * hl, "y": by + 0.06 * hh, "rx": 1.02 * hl, "ry": 0.105 * hh,
+             "fill": hatc, "stroke": trace(hatc), "stroke_width": lw},                     # brim
+            {"type": "ellipse", "x": hcx - 0.06 * hl, "y": by + 0.085 * hh, "rx": 0.86 * hl, "ry": 0.050 * hh,
+             "fill": kage(hatc), "stroke": None, "human": False},                          # its underside
+            poly([(hcx - 0.56 * hl, by + 0.03 * hh), (hcx - 0.50 * hl, by - 0.20 * hh), (hcx - 0.02 * hl, by - 0.33 * hh),
+                  (hcx + 0.46 * hl, by - 0.20 * hh), (hcx + 0.52 * hl, by + 0.03 * hh)], hatc, trace(hatc)),  # crown
+            flat([(hcx - 0.55 * hl, by + 0.03 * hh), (hcx - 0.49 * hl, by - 0.19 * hh), (hcx - 0.30 * hl, by - 0.27 * hh),
+                  (hcx - 0.28 * hl, by + 0.03 * hh)], kage(hatc)),
+            poly([(hcx - 0.56 * hl, by - 0.035 * hh), (hcx + 0.52 * hl, by - 0.035 * hh), (hcx + 0.53 * hl, by + 0.035 * hh),
+                  (hcx - 0.57 * hl, by + 0.035 * hh)], rib, trace(rib), smooth=False)]       # band
+    child = min(1.0, max(0.0, (18 - pr["age"]) / 12))
+    out["head"] = _scale_shapes(head, nx, ny, 1 + 0.60 * max(0.0, min(1.0, appeal)) * child)
+    return out
+
+
+def _shade_up(c: str, k: float) -> str:
+    """A lighter tone of a colour, for a sheen."""
+    c = c.lstrip("#")
+    r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    return "#%02x%02x%02x" % tuple(min(255, round(v * k + 18)) for v in (r, g, b))
+
+
 RIG_PARENTS = {  # part -> (parent part or 'root', joint used as pivot)
     "torso": ("root", "hip"), "head": ("torso", "neck"),
     "arm_far_upper": ("torso", "shoulder"), "arm_far_fore": ("arm_far_upper", "elbow"),
